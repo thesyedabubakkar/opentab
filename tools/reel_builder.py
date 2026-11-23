@@ -136,8 +136,8 @@ async def build_viral_reel(
                 ]
             )
             page = await browser.new_page(viewport={"width": 720, "height": 1280})
-            await page.goto(temp_html_path.as_uri(), wait_until="load")
-            await page.wait_for_timeout(300)
+            await page.set_content(html_rendered, wait_until="domcontentloaded", timeout=8000)
+            await page.wait_for_timeout(200)
             await page.screenshot(path=str(snapshot_path))
             await browser.close()
 
