@@ -17,22 +17,31 @@ from core.storyboard import VideoProductionPlan, Scene, generate_default_storybo
 from tools.documentary_builder import build_documentary_video, DOCUMENTARY_SCHEMA
 from tools.composio_tool import ComposioToolHub
 
+from tools.tab_studio_engine import build_tab_video
+
 logger = logging.getLogger(__name__)
 
 OPENMONTAGE_SCHEMA = {
     "type": "function",
     "function": {
         "name": "create_openmontage_video",
-        "description": "Generates a true multi-scene cinematic video montage with distinct visual cuts, neural voiceover per scene, and ambient music ducking (inspired by OpenMontage/tab.bot). Use for all video reels, shorts, stories, and marketing videos.",
+        "description": "Universal 4-Pipeline Video Studio (modeled after Tab tab.bot and OpenMontage). Generates App Launch Reels with real mobile screenshots, Raw Footage Recaps, Kinetic Animated Explainers, or Cinematic Trailers with active yellow word-by-word karaoke subtitles.",
         "parameters": {
             "type": "object",
             "properties": {
-                "topic": {"type": "string", "description": "Topic, brand, or product name"},
-                "hook_title": {"type": "string", "description": "Catchy dramatic hook question or opening headline"},
-                "script_text": {"type": "string", "description": "Narrative spoken voiceover script (30-50 words)"},
-                "aspect_ratio": {"type": "string", "enum": ["9:16", "16:9"], "description": "Aspect ratio: '9:16' for vertical Reels/Shorts/TikTok, or '16:9' for widescreen"},
-                "music_genre": {"type": "string", "enum": ["tech_ambient", "cinematic", "lofi"], "description": "Ambient soundtrack genre"},
-                "voice": {"type": "string", "description": "Neural voice name (e.g. 'en-US-ChristopherNeural', 'en-US-JennyNeural', 'hi-IN-MadhurNeural')"}
+                "topic": {"type": "string", "description": "Topic, brand, or product name (e.g. 'VARTAA', 'OpenTab', 'How AI Agents Work')"},
+                "website_url": {"type": "string", "description": "Website or web app URL to scrape real mobile screenshots from (e.g. 'https://vartaa.techorbitpvt.com')"},
+                "pipeline": {
+                    "type": "string",
+                    "enum": ["app_launch", "footage_recap", "animated_explainer", "cinematic_film"],
+                    "description": "Production pipeline: 'app_launch' (grid notebook, 3D phone with real screenshots, stamps), 'footage_recap' (cutting clips into recap), 'animated_explainer' (cards, tutorials), 'cinematic_film' (trailer, letterbox)"
+                },
+                "hook_title": {"type": "string", "description": "Catchy headline or opening question (e.g. 'Bina Phone Number Chat?')"},
+                "script_text": {"type": "string", "description": "Spoken voiceover script (15-35 words). Use natural Hinglish/Hindi for Indian apps, or English for international products."},
+                "voice": {"type": "string", "description": "Neural voice: 'hi-IN-MadhurNeural', 'hi-IN-SwaraNeural', 'en-US-ChristopherNeural', 'en-US-JennyNeural', 'en-GB-RyanNeural'"},
+                "stamp_text": {"type": "string", "description": "Angled callout stamp (e.g. 'CONSENT FIRST', 'ZERO PHONE NUMBER', '100% AUTONOMOUS')"},
+                "day_number": {"type": "integer", "description": "Day number for build-in-public badge (e.g. 1)"},
+                "progress_pct": {"type": "integer", "description": "Progress percentage for header strip (e.g. 91)"}
             },
             "required": ["topic"]
         }
@@ -74,69 +83,30 @@ class ToolRegistry:
                 max_results=int(arguments.get("max_results", 5))
             )
 
-        # Video Generation - OpenMontage Multi-Scene Cinematic Production
+        # Video Generation - Universal 4-Pipeline Studio Engine (Tab.bot / OpenMontage)
         elif tool_name in ["generate_viral_reel", "create_openmontage_video"]:
             product_name = arguments.get("product_name") or arguments.get("topic") or "OpenTab"
-            hook_title = arguments.get("hook_title") or f"The Future of {product_name}"
-            script_text = arguments.get("script_text") or arguments.get("script") or ""
-            voice = arguments.get("voice") or "en-US-ChristopherNeural"
-            theme = arguments.get("theme") or "dark_glass"
-            genre = arguments.get("music_genre") or ("tech_ambient" if theme == "dark_glass" else ("cinematic" if theme == "cinematic" else "lofi"))
+            website_url = arguments.get("website_url")
+            pipeline = arguments.get("pipeline")
+            hook_title = arguments.get("hook_title")
+            script_text = arguments.get("script_text") or arguments.get("script")
+            voice = arguments.get("voice")
+            stamp_text = arguments.get("stamp_text")
+            day_number = arguments.get("day_number", 1)
+            progress_pct = arguments.get("progress_pct", 91)
             aspect_ratio = arguments.get("aspect_ratio", "9:16")
-            shot = arguments.get("screenshot_path") or self.latest_screenshot
 
-            # Construct high-converting 4-scene narrative storyboard
-            hook_script = hook_title if len(hook_title) > 10 else f"What if everything you knew about {product_name} was about to change?"
-            solution_script = script_text if script_text else f"Meet {product_name}. Built from the ground up for speed, elegance, and total autonomy."
-            cta_script = f"Experience the future of {product_name} today."
-
-            plan = VideoProductionPlan(
-                title=product_name,
-                aspect_ratio=aspect_ratio,
-                music_genre=genre,
-                voice_name=voice,
-                scenes=[
-                    Scene(
-                        scene_id=1,
-                        title="The Hook",
-                        duration=3.5,
-                        voice_script=hook_script,
-                        visual_prompt=f"cinematic dramatic opening shot of {product_name}, 8k, volumetric lighting, photorealistic, futuristic dark atmosphere",
-                        motion_type="zoom_in"
-                    ),
-                    Scene(
-                        scene_id=2,
-                        title="The Problem",
-                        duration=4.0,
-                        voice_script="Traditional tools are clunky, slow, and full of friction. You deserve something better.",
-                        visual_prompt=f"chaotic cluttered software interface vs sleek dark minimal design, glowing neon accents, 8k",
-                        motion_type="pan_right"
-                    ),
-                    Scene(
-                        scene_id=3,
-                        title="The Solution",
-                        duration=4.5,
-                        voice_script=solution_script,
-                        visual_prompt=f"sleek glowing 3D smartphone displaying modern UI for {product_name}, Unreal Engine 5 render, cinematic depth of field",
-                        motion_type="zoom_in"
-                    ),
-                    Scene(
-                        scene_id=4,
-                        title="The Payoff",
-                        duration=3.5,
-                        voice_script=cta_script,
-                        visual_prompt=f"epic cinematic hero shot, glowing sunset horizon, sleek futuristic tech, 8k masterpiece",
-                        motion_type="zoom_out"
-                    )
-                ]
-            )
-
-            return await build_openmontage_video(
-                plan=plan,
+            return await build_tab_video(
                 topic=product_name,
-                aspect_ratio=aspect_ratio,
+                website_url=website_url,
+                pipeline=pipeline,
+                hook_title=hook_title,
+                script_text=script_text,
                 voice=voice,
-                music_genre=genre,
+                aspect_ratio=aspect_ratio,
+                day_number=int(day_number) if day_number else 1,
+                progress_pct=int(progress_pct) if progress_pct else 91,
+                stamp_text=stamp_text,
                 progress_cb=progress_cb
             )
 
