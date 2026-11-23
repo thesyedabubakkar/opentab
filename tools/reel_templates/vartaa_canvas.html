@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=720, height=1280, initial-scale=1.0">
+<title>Viral Reel Canvas</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800;900&family=Caveat:wght@700&family=Inter:wght@500;600;700;800&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    width: 720px;
+    height: 1280px;
+    overflow: hidden;
+    background-color: #f7f6f0;
+    /* Grid Notebook paper background */
+    background-image: 
+      linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+    background-size: 24px 24px;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    position: relative;
+  }
+
+  /* Left notebook red margin line */
+  .margin-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 64px;
+    width: 2px;
+    background-color: #f87171;
+    opacity: 0.8;
+  }
+
+  /* Header Container */
+  .header {
+    padding: 48px 48px 16px 88px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .day-badge {
+    background: #111827;
+    color: #ffffff;
+    font-weight: 900;
+    font-size: 22px;
+    padding: 8px 18px;
+    border-radius: 12px;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .day-badge span {
+    color: #facc15;
+  }
+
+  .header-meta {
+    text-align: right;
+    font-family: 'Inter', monospace;
+  }
+
+  .header-date {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1f2937;
+    letter-spacing: 1px;
+  }
+
+  .header-tag {
+    font-size: 13px;
+    font-weight: 800;
+    color: #ef4444;
+    letter-spacing: 0.5px;
+  }
+
+  /* Barcode Progress Strip */
+  .progress-wrap {
+    padding: 0 48px 24px 88px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .progress-bar-stripes {
+    flex: 1;
+    height: 14px;
+    background: repeating-linear-gradient(
+      90deg,
+      #f59e0b,
+      #f59e0b 4px,
+      #e5e7eb 4px,
+      #e5e7eb 8px
+    );
+    border-radius: 4px;
+    border: 1.5px solid #1f2937;
+  }
+
+  .progress-val {
+    font-size: 15px;
+    font-weight: 900;
+    color: #111827;
+  }
+
+  /* Main Hero Hook Section */
+  .hero-sec {
+    text-align: center;
+    padding: 8px 32px 16px;
+  }
+
+  .main-title {
+    font-size: 64px;
+    font-weight: 900;
+    letter-spacing: -1.5px;
+    color: #111827;
+    text-transform: uppercase;
+    line-height: 1.05;
+  }
+
+  .pill-highlight {
+    background-color: #fde047;
+    padding: 6px 18px;
+    border-radius: 8px;
+    font-size: 26px;
+    font-weight: 800;
+    display: inline-block;
+    color: #111827;
+    font-family: 'Caveat', cursive, sans-serif;
+    transform: rotate(-1deg);
+    margin-top: 10px;
+    box-shadow: 0 4px 12px rgba(250, 204, 21, 0.3);
+  }
+
+  .sub-tagline {
+    font-size: 18px;
+    color: #4b5563;
+    font-style: italic;
+    margin-top: 8px;
+    font-weight: 600;
+  }
+
+  /* Diagram Comparison Cards */
+  .comparison-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    margin: 20px auto 16px;
+    position: relative;
+    max-width: 580px;
+  }
+
+  .card-old {
+    background: #ffffff;
+    border: 2px solid #111827;
+    border-radius: 12px;
+    padding: 16px 20px;
+    position: relative;
+    text-align: center;
+    box-shadow: 3px 3px 0px #111827;
+  }
+
+  .card-old::after {
+    content: "✕";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 68px;
+    font-weight: 900;
+    color: #ef4444;
+    opacity: 0.85;
+    pointer-events: none;
+  }
+
+  .card-arrow {
+    font-size: 28px;
+    font-weight: 900;
+    color: #111827;
+  }
+
+  .card-new {
+    background: #ffffff;
+    border: 3px solid #10b981;
+    border-radius: 12px;
+    padding: 16px 20px;
+    text-align: center;
+    box-shadow: 3px 3px 0px #10b981;
+  }
+
+  .card-new .tag {
+    color: #059669;
+    font-weight: 800;
+    font-size: 14px;
+    margin-top: 4px;
+  }
+
+  /* Angled Rubber Stamp */
+  .rubber-stamp {
+    position: absolute;
+    right: 20px;
+    bottom: -24px;
+    border: 3px solid #ef4444;
+    color: #ef4444;
+    font-size: 15px;
+    font-weight: 900;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 6px;
+    transform: rotate(6deg);
+    letter-spacing: 1px;
+    background: rgba(254, 242, 242, 0.95);
+    box-shadow: 2px 2px 0px rgba(239, 68, 68, 0.4);
+  }
+
+  /* 3D Floating Phone Mockup */
+  .mockup-stage {
+    margin: 28px auto 0;
+    display: flex;
+    justify-content: center;
+    perspective: 1000px;
+  }
+
+  .phone-chassis {
+    width: 320px;
+    height: 520px;
+    background: #090d16;
+    border: 6px solid #1e293b;
+    border-radius: 40px;
+    box-shadow: 
+      0 25px 50px -12px rgba(0, 0, 0, 0.35),
+      0 0 0 1px rgba(255, 255, 255, 0.1);
+    position: relative;
+    overflow: hidden;
+    transform: rotateX(6deg) rotateY(-4deg) rotateZ(1deg);
+    transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .phone-island {
+    width: 90px;
+    height: 18px;
+    background: #000000;
+    border-radius: 20px;
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+  }
+
+  .screen-content {
+    width: 100%;
+    height: 100%;
+    background: #0f172a;
+    color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    padding: 38px 16px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .screen-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 20px;
+  }
+
+  /* Synthetic UI elements if no screenshot provided */
+  .app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #334155;
+  }
+
+  .app-brand {
+    font-size: 16px;
+    font-weight: 900;
+    color: #a855f7;
+    letter-spacing: 0.5px;
+  }
+
+  .app-step {
+    font-size: 12px;
+    color: #94a3b8;
+  }
+
+  .screen-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .ui-card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .ui-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: #ffffff;
+  }
+
+  .ui-desc {
+    font-size: 12px;
+    color: #94a3b8;
+    line-height: 1.4;
+  }
+
+  .ui-badge-pill {
+    align-self: flex-start;
+    background: #059669;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 6px;
+  }
+
+  /* Kinetic Subtitle Bar (Bottom) */
+  .subtitles-container {
+    position: absolute;
+    bottom: 40px;
+    left: 32px;
+    right: 32px;
+    text-align: center;
+    z-index: 100;
+  }
+
+  .subtitle-text {
+    font-size: 38px;
+    font-weight: 900;
+    color: #111827;
+    letter-spacing: -0.5px;
+    line-height: 1.25;
+    display: inline-block;
+  }
+
+  .sub-highlight {
+    background: #facc15;
+    color: #000000;
+    padding: 4px 14px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(250, 204, 21, 0.4);
+    display: inline-block;
+    transform: scale(1.05);
+    transition: all 0.2s ease;
+  }
+</style>
+</head>
+<body>
+
+  <div class="margin-line"></div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="day-badge" id="dayBadge">
+      {{PRODUCT_NAME}} <span>DAY {{DAY_NUMBER}}</span>
+    </div>
+    <div class="header-meta">
+      <div class="header-date" id="dateText">{{DATE_TEXT}}</div>
+      <div class="header-tag">{{SUB_BADGE}}</div>
+    </div>
+  </header>
+
+  <!-- Progress Bar -->
+  <div class="progress-wrap">
+    <div class="progress-bar-stripes"></div>
+    <div class="progress-val" id="progressVal">{{PROGRESS_PCT}}%</div>
+  </div>
+
+  <!-- Hero Titles -->
+  <section class="hero-sec">
+    <h1 class="main-title" id="mainTitle">{{PRODUCT_NAME}}</h1>
+    <div class="pill-highlight" id="hookPill">{{HOOK_PILL}}</div>
+    <div class="sub-tagline" id="tagline">{{TAGLINE}}</div>
+  </section>
+
+  <!-- Diagram Cards -->
+  <div class="comparison-row">
+    <div class="card-old" id="cardOld">
+      <div style="font-size: 15px; font-weight: 800; color: #111827;">{{OLD_LABEL}}</div>
+      <div style="font-size: 12px; color: #6b7280; margin-top: 2px;">{{OLD_SUB}}</div>
+    </div>
+    <div class="card-arrow">➔</div>
+    <div class="card-new" id="cardNew">
+      <div style="font-size: 15px; font-weight: 800; color: #111827;">{{NEW_LABEL}}</div>
+      <div class="tag">{{NEW_SUB}}</div>
+    </div>
+    <div class="rubber-stamp" id="rubberStamp">{{STAMP_TEXT}}</div>
+  </div>
+
+  <!-- 3D Phone Mockup -->
+  <div class="mockup-stage">
+    <div class="phone-chassis" id="phoneChassis">
+      <div class="phone-island"></div>
+      <div class="screen-content" id="screenContent">
+        <!-- Injected user screenshot or synthetic dark mode UI -->
+        {{SCREEN_BODY}}
+      </div>
+    </div>
+  </div>
+
+  <!-- Kinetic Subtitles -->
+  <div class="subtitles-container">
+    <div class="subtitle-text" id="subtitleText">
+      {{SUBTITLE_HTML}}
+    </div>
+  </div>
+
+</body>
+</html>

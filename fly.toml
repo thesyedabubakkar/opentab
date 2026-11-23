@@ -1,20 +1,18 @@
-# fly.toml app configuration file for OpenTab
-# Docs: https://fly.io/docs/reference/configuration/
-
-app = "opentab-agent"
-primary_region = "iad"
+# fly.toml app configuration file generated for opentab-agent
+app = 'opentab-agent'
+primary_region = 'iad'
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = 'Dockerfile'
 
 [env]
-  PORT = "10000"
-  LLM_PROVIDER = "groq"
-  GROQ_MODEL = "llama-3.3-70b-versatile"
-  GEMINI_MODEL = "gemini-1.5-flash"
-  ENABLE_TELEGRAM = "True"
-  ENABLE_WHATSAPP = "True"
-  BROWSER_HEADLESS = "True"
+  BROWSER_HEADLESS = 'True'
+  ENABLE_TELEGRAM = 'True'
+  ENABLE_WHATSAPP = 'False'
+  GEMINI_MODEL = 'gemini-1.5-flash'
+  GROQ_MODEL = 'qwen/qwen3.8-27b'
+  LLM_PROVIDER = 'groq'
+  PORT = '10000'
 
 [http_service]
   internal_port = 10000
@@ -32,6 +30,9 @@ primary_region = "iad"
     path = '/health'
 
 [[vm]]
-  memory = '1gb'
+  memory = '2gb'
   cpu_kind = 'shared'
   cpus = 1
+
+[[restart]]
+  policy = 'always'
