@@ -1,0 +1,14 @@
+{
+  "name": "opentab-whatsapp-bridge",
+  "version": "1.0.0",
+  "description": "100% Open-Source WhatsApp Bridge for OpenTab Agent",
+  "main": "channels/whatsapp_service.js",
+  "scripts": {
+    "start": "node channels/whatsapp_service.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9",
+    "qrcode-terminal": "^0.12.0",
+    "pino": "^9.6.0"
+  }
+}

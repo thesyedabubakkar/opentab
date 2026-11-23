@@ -1,0 +1,31 @@
+# Render.com Blueprint Specification for OpenTab
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: opentab-agent
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: LLM_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-1.5-flash
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: ENABLE_TELEGRAM
+        value: "True"
+      - key: ENABLE_WHATSAPP
+        value: "True"
+      - key: BROWSER_HEADLESS
+        value: "True"
+      - key: PORT
+        value: "10000"

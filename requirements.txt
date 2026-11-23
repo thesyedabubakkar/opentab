@@ -1,0 +1,15 @@
+playwright>=1.49.0
+python-telegram-bot[job-queue]>=21.9
+httpx>=0.28.1
+aiohttp>=3.11.10
+duckduckgo-search>=7.1.1
+pydantic>=2.10.3
+pydantic-settings>=2.6.1
+python-dotenv>=1.0.1
+aiosqlite>=0.20.0
+beautifulsoup4>=4.12.3
+markdownify>=0.14.1
+composio-core>=0.6.0
+pytest>=8.3.4
+pytest-asyncio>=0.24.0
+edge-tts>=7.0.0
