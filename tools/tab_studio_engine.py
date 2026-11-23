@@ -394,11 +394,9 @@ async def build_tab_video(
         ]
 
         # Step 3: Synthesize Speech & ASS Karaoke per Scene
-        if progress_cb:
-            await progress_cb(f"🎙️ Synthesizing 6-scene voiceover & word-level karaoke ({chosen_voice.split('-')[0].upper()})...")
-
-        scene_video_clips = []
         scene_audio_files = []
+        scene_snapshots = []
+        scene_durations = []
         total_timeline = 0.0
         ass_dialogue_lines = []
 
@@ -416,19 +414,29 @@ async def build_tab_video(
                 sc_audio = temp_dir / f"scene_{sc_id}.mp3"
                 sc_ass = temp_dir / f"scene_{sc_id}.ass"
 
-                # Generate speech + boundary events
-                k_data = await generate_karaoke_audio_and_ass(
-                    text=sc_script,
-                    voice=chosen_voice,
-                    audio_path=sc_audio,
-                    ass_path=sc_ass,
-                    highlight_color="&H0015CCFA",
-                    font_size=44,
-                    margin_v=140
+                if progress_cb:
+                    try:
+                        await progress_cb(f"🎬 Composing Scene {sc_id}/6 ({sc['progress']})...")
+                    except Exception:
+                        pass
+
+                # Generate speech + boundary events with safety timeout
+                k_data = await asyncio.wait_for(
+                    generate_karaoke_audio_and_ass(
+                        text=sc_script,
+                        voice=chosen_voice,
+                        audio_path=sc_audio,
+                        ass_path=sc_ass,
+                        highlight_color="&H0015CCFA",
+                        font_size=44,
+                        margin_v=140
+                    ),
+                    timeout=25.0
                 )
                 dur = k_data["duration"]
                 sc["duration"] = dur
                 scene_audio_files.append(sc_audio)
+                scene_durations.append(dur)
 
                 # Render HTML Page for Scene
                 html = _get_base_html(
@@ -438,21 +446,9 @@ async def build_tab_video(
                     content_html=sc["content_html"]
                 )
                 sc_snap = temp_dir / f"snap_{sc_id}.png"
-                await page.set_content(html, wait_until="domcontentloaded")
+                await page.set_content(html, wait_until="domcontentloaded", timeout=10000)
                 await page.screenshot(path=str(sc_snap))
-
-                # Render individual video clip for this scene (loop image for duration)
-                sc_clip = temp_dir / f"clip_{sc_id}.mp4"
-                cmd_clip = [
-                    ffmpeg_bin, "-y",
-                    "-loop", "1", "-i", str(sc_snap),
-                    "-t", str(dur),
-                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-                    "-pix_fmt", "yuv420p",
-                    str(sc_clip)
-                ]
-                subprocess.run(cmd_clip, capture_output=True, check=True)
-                scene_video_clips.append(sc_clip)
+                scene_snapshots.append(sc_snap)
 
                 # Parse ASS dialogue lines and offset by total_timeline
                 with open(sc_ass, "r", encoding="utf-8") as f:
@@ -460,7 +456,6 @@ async def build_tab_video(
                         if line.startswith("Dialogue:"):
                             parts = line.split(",", 9)
                             if len(parts) == 10:
-                                # Parse start & end
                                 def parse_t(ts):
                                     h, m, s = ts.split(":")
                                     return int(h)*3600 + int(m)*60 + float(s)
@@ -493,26 +488,7 @@ async def build_tab_video(
         with open(master_ass, "w", encoding="utf-8") as f:
             f.write("\n".join(ass_header + ass_dialogue_lines))
 
-        # Step 5: Concat Video Clips
-        if progress_cb:
-            await progress_cb(f"🎬 Concatenating 6 narrative scenes ({total_timeline:.1f}s)...")
-
-        concat_list = temp_dir / "concat_list.txt"
-        with open(concat_list, "w", encoding="utf-8") as f:
-            for clip in scene_video_clips:
-                f.write(f"file '{clip.name}'\n")
-
-        raw_merged_video = temp_dir / "merged_raw.mp4"
-        cmd_merge = [
-            ffmpeg_bin, "-y",
-            "-f", "concat", "-safe", "0",
-            "-i", str(concat_list),
-            "-c", "copy",
-            str(raw_merged_video)
-        ]
-        subprocess.run(cmd_merge, capture_output=True, check=True)
-
-        # Step 6: Concat Voice Audio
+        # Step 5: Concat Voice Audio
         audio_concat_list = temp_dir / "audio_concat.txt"
         with open(audio_concat_list, "w", encoding="utf-8") as f:
             for af in scene_audio_files:
@@ -520,26 +496,40 @@ async def build_tab_video(
 
         master_voice = temp_dir / "master_voice.mp3"
         cmd_a_merge = [
-            ffmpeg_bin, "-y",
+            ffmpeg_bin, "-y", "-nostdin",
             "-f", "concat", "-safe", "0",
             "-i", str(audio_concat_list),
             "-c", "copy",
             str(master_voice)
         ]
-        subprocess.run(cmd_a_merge, capture_output=True, check=True)
+        subprocess.run(cmd_a_merge, capture_output=True, timeout=20, check=True)
+
+        # Step 6: Create Concat Demuxer for 6 Scene Images with exact durations
+        concat_scenes_txt = temp_dir / "concat_scenes.txt"
+        with open(concat_scenes_txt, "w", encoding="utf-8") as f:
+            for snap, d in zip(scene_snapshots, scene_durations):
+                safe_snap = str(snap).replace("\\", "/")
+                f.write(f"file '{safe_snap}'\n")
+                f.write(f"duration {d:.2f}\n")
+            # Repeat last file per FFmpeg concat demuxer spec
+            if scene_snapshots:
+                f.write(f"file '{str(scene_snapshots[-1]).replace(chr(92), '/')}'\n")
 
         # Step 7: Synthesize Lo-Fi Background Beat
         bg_music = temp_dir / "lofi_beat.mp3"
         generate_ambient_soundtrack(duration=total_timeline + 2.0, genre="lofi", save_path=bg_music)
 
-        # Step 8: Final Master Encoding with Word-Level ASS Karaoke Overlay and Audio Ducking
+        # Step 8: Single-Pass Master Timeline Compositor with ASS Karaoke and Audio Ducking
         if progress_cb:
-            await progress_cb("✨ Rendering master 9:16 viral reel with active yellow karaoke subtitles...")
+            try:
+                await progress_cb("✨ Encoding master 9:16 viral reel with active yellow karaoke subtitles...")
+            except Exception:
+                pass
 
         safe_ass = str(master_ass).replace("\\", "/").replace(":", r"\:")
         cmd_final = [
-            ffmpeg_bin, "-y",
-            "-i", str(raw_merged_video),
+            ffmpeg_bin, "-y", "-nostdin",
+            "-f", "concat", "-safe", "0", "-i", str(concat_scenes_txt),
             "-i", str(master_voice),
             "-i", str(bg_music),
             "-filter_complex",
@@ -553,7 +543,27 @@ async def build_tab_video(
             "-movflags", "+faststart",
             str(out_video)
         ]
-        subprocess.run(cmd_final, capture_output=True, check=True)
+        res = subprocess.run(cmd_final, capture_output=True, timeout=60)
+        if res.returncode != 0:
+            logger.error(f"FFmpeg single-pass master encoding failed: {res.stderr}")
+            # Fallback without ass filter if libass is unavailable
+            cmd_fallback = [
+                ffmpeg_bin, "-y", "-nostdin",
+                "-f", "concat", "-safe", "0", "-i", str(concat_scenes_txt),
+                "-i", str(master_voice),
+                "-i", str(bg_music),
+                "-filter_complex",
+                "[2:a]volume=0.15[bg];[1:a][bg]amix=inputs=2:duration=first[a]",
+                "-map", "0:v",
+                "-map", "[a]",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+                "-c:a", "aac", "-b:a", "192k",
+                "-t", str(total_timeline),
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
+                str(out_video)
+            ]
+            subprocess.run(cmd_fallback, capture_output=True, timeout=60, check=True)
 
         logger.info(f"OpenTab Tab.bot Reel rendered successfully ({total_timeline:.1f}s) -> {out_video}")
         return {
