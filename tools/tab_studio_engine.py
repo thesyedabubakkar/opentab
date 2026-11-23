@@ -7,13 +7,13 @@ import re
 import shutil
 import subprocess
 import tempfile
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 import uuid
 
 from core.config import DATA_DIR, settings
 from tools.app_scraper import capture_app_screens
 from tools.ffmpeg_utils import get_ffmpeg_path, get_audio_duration
-from tools.karaoke_subtitles import generate_karaoke_audio_and_ass
+from tools.karaoke_subtitles import generate_karaoke_audio_and_ass, _format_ass_time
 from tools.openmontage_assets import generate_ambient_soundtrack
 
 logger = logging.getLogger(__name__)
@@ -21,22 +21,17 @@ logger = logging.getLogger(__name__)
 OUTPUT_DIR = DATA_DIR / "generated_videos"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-def _classify_pipeline(topic: str, website_url: Optional[str], raw_clips: Optional[List[str]]) -> str:
+def _classify_pipeline(topic: str, website_url: Optional[str] = None, raw_clips: Optional[List[str]] = None) -> str:
     """Classifies user intent into one of the 4 canonical Tab.bot pipelines."""
     if raw_clips and len(raw_clips) > 0:
         return "footage_recap"
-
     topic_lower = topic.lower()
     if website_url or any(ext in topic_lower for ext in [".com", ".org", ".io", ".app", ".dev", ".net"]):
         return "app_launch"
-
     if any(k in topic_lower for k in ["how to", "explainer", "guide", "tutorial", "vs", "versus", "architecture", "breakdown"]):
         return "animated_explainer"
-
     if any(k in topic_lower for k in ["film", "movie", "sci-fi", "cinematic", "story", "trailer", "signal from tomorrow", "space"]):
         return "cinematic_film"
-
-    # Default to app_launch if a product is mentioned, otherwise animated_explainer
     return "app_launch"
 
 def _extract_url_from_text(text: str) -> Optional[str]:
@@ -49,100 +44,9 @@ def _extract_url_from_text(text: str) -> Optional[str]:
         return "https://" + domain_match.group(1)
     return None
 
-async def build_tab_video(
-    topic: str = "OpenTab",
-    website_url: Optional[str] = None,
-    pipeline: Optional[str] = None,
-    hook_title: Optional[str] = None,
-    script_text: Optional[str] = None,
-    voice: Optional[str] = None,
-    aspect_ratio: str = "9:16",
-    day_number: int = 1,
-    progress_pct: int = 91,
-    stamp_text: Optional[str] = None,
-    raw_clips: Optional[List[str]] = None,
-    progress_cb: Optional[Callable[[str], Any]] = None
-) -> Dict[str, Any]:
-    """
-    Universal 4-Pipeline Video Studio modeled after Tab.bot and OpenMontage:
-    - Pipeline A: Build-In-Public App Launch Reel (grid notebook, 3D phone mockup, real screenshots, rubber stamp)
-    - Pipeline B: Raw Footage Montage & Recap (cutting video clips into a 30s recap)
-    - Pipeline C: Kinetic Animated Explainer (studio cards, comparative matrices, tutorials)
-    - Pipeline D: Cinematic Film & Sci-Fi Trailer (letterbox, orchestral soundtrack)
-    """
-    from playwright.async_api import async_playwright
-
-    ffmpeg_bin = get_ffmpeg_path()
-    temp_dir = Path(tempfile.mkdtemp(prefix="tab_studio_"))
-    out_video = OUTPUT_DIR / f"tab_video_{uuid.uuid4().hex[:8]}.mp4"
-
-    # Auto-extract URL if embedded in topic
-    if not website_url:
-        website_url = _extract_url_from_text(topic)
-
-    # Classify pipeline
-    chosen_pipeline = pipeline or _classify_pipeline(topic, website_url, raw_clips)
-    logger.info(f"OpenTab Studio selected pipeline: '{chosen_pipeline}' for topic '{topic}'")
-
-    try:
-        # -------------------------------------------------------------
-        # PIPELINE A: BUILD-IN-PUBLIC APP LAUNCH REEL (The Tab.bot Flagship)
-        # -------------------------------------------------------------
-        if chosen_pipeline == "app_launch":
-            if progress_cb:
-                await progress_cb(f"📱 Pipeline A: Launching Build-In-Public studio for {topic}...")
-
-            # 1. Scrape real screenshots if URL exists
-            b64_screenshot = None
-            if website_url:
-                if progress_cb:
-                    await progress_cb(f"🌐 Scraping real mobile UI from {website_url}...")
-                screens = await capture_app_screens(website_url)
-                shot_path = screens.get("welcome") or screens.get("features")
-                if shot_path and Path(shot_path).exists():
-                    with open(shot_path, "rb") as f:
-                        b64_screenshot = base64.b64encode(f.read()).decode("utf-8")
-
-            # 2. Select charismatic voice & script
-            chosen_voice = voice or ("hi-IN-MadhurNeural" if any(w in topic.lower() for w in ["vartaa", "india", "bina"]) else "en-US-ChristopherNeural")
-            
-            # Default script if none provided
-            if not script_text:
-                if "vartaa" in topic.lower():
-                    chosen_voice = "hi-IN-MadhurNeural"
-                    script_text = "Bina phone number chat? Vartaa - Made in India private chat. Zero tracking, zero phone numbers. Pure sovereign privacy."
-                    hook_title = hook_title or "Bina Phone Number Chat?"
-                    stamp_text = stamp_text or "CONSENT FIRST"
-                else:
-                    script_text = f"Stop doing manual grunt work. {topic} is built from the ground up for speed, elegance, and 100% autonomy."
-                    hook_title = hook_title or f"The Future of {topic}"
-                    stamp_text = stamp_text or "100% AUTONOMOUS"
-
-            # 3. Generate Audio + Word-Level ASS Karaoke Subtitles
-            if progress_cb:
-                await progress_cb(f"🎙️ Synthesizing voiceover & active karaoke subtitles ({chosen_voice.split('-')[0].upper()})...")
-
-            audio_path = temp_dir / "voice.mp3"
-            ass_path = temp_dir / "karaoke.ass"
-            karaoke_data = await generate_karaoke_audio_and_ass(
-                text=script_text,
-                voice=chosen_voice,
-                audio_path=audio_path,
-                ass_path=ass_path,
-                highlight_color="&H0015CCFA",  # Bright Yellow #FACC15
-                base_color="&H00FFFFFF",
-                font_size=42,
-                margin_v=140
-            )
-            audio_dur = karaoke_data["duration"]
-
-            # 4. Synthesize Lo-Fi Background Beat
-            bg_music = temp_dir / "lofi_beat.mp3"
-            generate_ambient_soundtrack(duration=audio_dur + 1.0, genre="lofi", save_path=bg_music)
-
-            # 5. Render Notebook HTML Canvas
-            product_tag = topic.split()[0].upper()
-            html_canvas = f"""<!DOCTYPE html>
+def _get_base_html(header_day: str, progress_pct: str, date_text: str, content_html: str) -> str:
+    """Generates standard notebook paper page matching Tab.bot's signature aesthetic."""
+    return f"""<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
@@ -161,370 +65,508 @@ async def build_tab_video(
     padding: 56px 44px;
     position: relative;
   }}
-  /* Left red notebook margin rule */
+  /* Left red notebook margin line */
   .notebook-margin {{
     position: absolute; top: 0; bottom: 0; left: 34px; width: 2px;
-    background: #ef4444; opacity: 0.65;
+    background: #ef4444; opacity: 0.7;
   }}
-  /* Top Header with Day Badge and Progress Bar */
-  .header-box {{ display: flex; flex-direction: column; gap: 12px; z-index: 10; margin-left: 16px; }}
+  /* Header Section */
+  .header-box {{ display: flex; flex-direction: column; gap: 10px; z-index: 10; margin-left: 18px; }}
   .header-row {{ display: flex; justify-content: space-between; align-items: center; }}
   .day-badge {{
-    background: #0f172a; color: #facc15; font-weight: 900; font-size: 19px;
-    padding: 8px 18px; border-radius: 10px; letter-spacing: 0.5px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    background: #0f172a; color: #fff; font-weight: 900; font-size: 19px;
+    padding: 7px 18px; border-radius: 9px; letter-spacing: 0.5px;
   }}
-  .category-badge {{
-    background: #ffffff; border: 1.5px solid #cbd5e1; color: #475569;
-    font-weight: 800; font-size: 15px; padding: 6px 14px; border-radius: 999px;
-    letter-spacing: 1px;
+  .day-highlight {{ color: #facc15; margin-left: 6px; }}
+  .header-meta {{
+    font-size: 14px; font-weight: 800; text-align: right; color: #64748b; line-height: 1.3;
   }}
-  .progress-wrap {{ display: flex; align-items: center; gap: 12px; }}
-  .progress-bar {{
-    flex: 1; height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden;
+  .header-red-tag {{ color: #dc2626; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; }}
+  .progress-bar-wrap {{
+    display: flex; align-items: center; justify-content: space-between;
+    border-top: 1.5px dashed #cbd5e1; border-bottom: 1.5px dashed #cbd5e1;
+    padding: 6px 4px; margin-top: 4px;
   }}
-  .progress-fill {{
-    width: {progress_pct}%; height: 100%; background: #0f172a; border-radius: 999px;
-  }}
-  .progress-num {{ font-size: 14px; font-weight: 800; color: #64748b; }}
+  .progress-label {{ font-size: 11px; font-weight: 800; letter-spacing: 1px; color: #64748b; text-transform: uppercase; }}
+  .progress-num {{ font-size: 13px; font-weight: 900; color: #0f172a; }}
 
-  /* Dramatic Headline */
-  .headline-section {{ margin: 20px 0 10px 16px; z-index: 10; }}
-  .main-hook {{
-    font-size: 46px; font-weight: 900; line-height: 1.12; color: #0f172a; letter-spacing: -0.5px;
-  }}
-
-  /* Center 3D Tilted Phone Chassis */
+  /* Center Stage */
   .stage-center {{
-    flex: 1; display: flex; justify-content: center; align-items: center;
-    position: relative; z-index: 10;
-  }}
-  .phone-chassis {{
-    width: 360px; height: 570px; background: #000; border-radius: 42px;
-    box-shadow: 0 35px 70px rgba(0,0,0,0.35), 0 10px 20px rgba(0,0,0,0.15);
-    border: 4px solid #1e293b; overflow: hidden; position: relative;
-    transform: perspective(1000px) rotateY(-3deg) rotateX(2deg);
-    display: flex; flex-direction: column;
-  }}
-  .phone-screen {{
-    width: 100%; height: 100%; object-fit: cover; background: #0f172a;
-  }}
-  .mock-screen {{
-    width: 100%; height: 100%; background: #090a0f; color: #fff;
-    padding: 24px 20px; display: flex; flex-direction: column; justify-content: center; align-items: center;
-    gap: 16px; text-align: center;
-  }}
-  .mock-brand {{ font-size: 32px; font-weight: 900; color: #38bdf8; }}
-  .mock-desc {{ font-size: 16px; color: #94a3b8; font-weight: 600; }}
-
-  /* Angled Rubber Stamp */
-  .rubber-stamp {{
-    position: absolute; right: 28px; bottom: 40px;
-    border: 4px solid #dc2626; color: #dc2626;
-    font-size: 24px; font-weight: 900; padding: 8px 22px; border-radius: 12px;
-    letter-spacing: 2px; text-transform: uppercase;
-    transform: rotate(-12deg);
-    background: rgba(254, 242, 242, 0.9);
-    box-shadow: 0 10px 25px rgba(220, 38, 38, 0.2);
-    z-index: 25;
+    flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
+    position: relative; z-index: 10; margin-left: 18px;
   }}
 
-  /* Subtitle Spacer Bar */
-  .subtitle-zone {{
-    height: 120px; z-index: 10;
+  /* Typography Styles */
+  .huge-brand-title {{
+    font-size: 76px; font-weight: 900; letter-spacing: -2px; color: #0f172a; margin-bottom: 12px; text-align: center;
   }}
+  .yellow-highlight-box {{
+    background: #fde047; color: #0f172a; font-size: 32px; font-weight: 900;
+    padding: 10px 24px; border-radius: 8px; margin-bottom: 14px; text-align: center;
+    box-shadow: 0 4px 12px rgba(253, 224, 71, 0.4);
+  }}
+  .handwritten-sub {{
+    font-size: 26px; font-style: italic; color: #64748b; font-weight: 600; text-align: center;
+  }}
+
+  /* Comparison Cards */
+  .comparison-row {{
+    display: flex; align-items: center; justify-content: center; gap: 24px; margin: 30px 0; width: 100%;
+  }}
+  .card-cross {{
+    background: #fff; border: 3px solid #0f172a; border-radius: 20px;
+    padding: 24px 20px; position: relative; width: 220px; text-align: center;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.06);
+  }}
+  .cross-x {{
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #dc2626; font-size: 120px; font-weight: 900; opacity: 0.85; pointer-events: none;
+  }}
+  .card-num-text {{ font-size: 24px; font-weight: 800; color: #64748b; margin-bottom: 4px; }}
+  .card-sub-label {{ font-size: 16px; font-weight: 700; color: #94a3b8; }}
+  .arrow-symbol {{ font-size: 36px; font-weight: 900; color: #0f172a; }}
+  .card-green {{
+    background: #fff; border: 3px solid #10b981; border-radius: 20px;
+    padding: 24px 20px; width: 220px; text-align: center;
+    box-shadow: 0 10px 25px rgba(16, 185, 129, 0.15);
+  }}
+  .card-user-text {{ font-size: 24px; font-weight: 900; color: #0f172a; margin-bottom: 6px; }}
+  .card-priv-label {{ font-size: 16px; font-weight: 800; color: #10b981; }}
+
+  /* Rubber Stamps */
+  .stamp-box {{
+    border: 3.5px solid #dc2626; color: #dc2626; font-size: 22px; font-weight: 900;
+    padding: 8px 22px; border-radius: 10px; letter-spacing: 2px; text-transform: uppercase;
+    transform: rotate(-8deg); display: inline-block; width: fit-content; margin-top: 16px;
+    background: rgba(254, 242, 242, 0.95);
+  }}
+  .stamp-green {{
+    border-color: #10b981; color: #10b981; transform: rotate(-5deg); background: rgba(236, 253, 245, 0.95);
+  }}
+
+  /* Phone Mockups */
+  .phone-frame {{
+    background: #000; border-radius: 36px; border: 4px solid #1e293b;
+    overflow: hidden; position: relative; display: flex; flex-direction: column;
+    box-shadow: 0 25px 50px rgba(0,0,0,0.3);
+  }}
+  .phone-single {{ width: 340px; height: 560px; }}
+  .phone-dual {{ width: 270px; height: 460px; }}
+  .phone-triple {{ width: 200px; height: 380px; }}
+  .screen-img {{ width: 100%; height: 100%; object-fit: cover; background: #0f172a; }}
+
+  /* Step Banner */
+  .step-header-row {{
+    display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 20px;
+  }}
+  .step-pill-title {{ font-size: 28px; font-weight: 900; font-style: italic; color: #0f172a; }}
+  .step-fraction {{ font-size: 28px; font-weight: 900; color: #dc2626; }}
+
+  /* CTA Card */
+  .cta-card {{
+    background: #fff; border: 3px solid #0f172a; border-radius: 28px;
+    padding: 36px 30px; width: 100%; text-align: center;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.08); display: flex; flex-direction: column; gap: 16px;
+  }}
+  .cta-heading {{ font-size: 32px; font-weight: 900; color: #0f172a; letter-spacing: 0.5px; }}
+  .cta-url-box {{
+    background: #0f172a; color: #fde047; font-family: monospace; font-size: 24px; font-weight: 800;
+    padding: 14px 20px; border-radius: 12px; letter-spacing: 1px;
+  }}
+  .cta-live-sub {{ font-size: 20px; font-weight: 800; color: #10b981; }}
+  .cta-soon-sub {{ font-size: 17px; font-weight: 700; color: #64748b; }}
+
+  .subtitles-safe-zone {{ height: 140px; }}
 </style>
 </head>
 <body>
   <div class="notebook-margin"></div>
-  
+
   <div class="header-box">
     <div class="header-row">
-      <div class="day-badge">{product_tag} DAY {day_number}</div>
-      <div class="category-badge">BUILD IN PUBLIC</div>
+      <div class="day-badge">{header_day.split()[0]} <span class="day-highlight">{' '.join(header_day.split()[1:])}</span></div>
+      <div class="header-meta">
+        <div>{date_text}</div>
+        <div class="header-red-tag">MADE IN INDIA</div>
+      </div>
     </div>
-    <div class="progress-wrap">
-      <div class="progress-bar"><div class="progress-fill"></div></div>
-      <div class="progress-num">{progress_pct}%</div>
+    <div class="progress-bar-wrap">
+      <div class="progress-label">BUILDING IN PUBLIC</div>
+      <div class="progress-num">{progress_pct}</div>
     </div>
-  </div>
-
-  <div class="headline-section">
-    <div class="main-hook">{hook_title}</div>
   </div>
 
   <div class="stage-center">
-    <div class="phone-chassis">
-      {f'<img class="phone-screen" src="data:image/png;base64,{b64_screenshot}" alt="App UI"/>' if b64_screenshot else f'<div class="mock-screen"><div class="mock-brand">{topic}</div><div class="mock-desc">The sovereign next-generation app</div></div>'}
-    </div>
-    {f'<div class="rubber-stamp">{stamp_text}</div>' if stamp_text else ''}
+    {content_html}
   </div>
 
-  <div class="subtitle-zone"></div>
+  <div class="subtitles-safe-zone"></div>
 </body>
 </html>"""
 
-            # 6. Capture HD snapshot
-            snapshot_path = temp_dir / "scene_snapshot.png"
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(
-                    headless=settings.BROWSER_HEADLESS,
-                    args=["--disable-gpu", "--disable-dev-shm-usage", "--no-sandbox", "--renderer-process-limit=1"]
+async def build_tab_video(
+    topic: str = "VARTAA",
+    website_url: Optional[str] = None,
+    pipeline: Optional[str] = None,
+    hook_title: Optional[str] = None,
+    script_text: Optional[str] = None,
+    voice: Optional[str] = None,
+    aspect_ratio: str = "9:16",
+    day_number: int = 1,
+    progress_pct: int = 91,
+    stamp_text: Optional[str] = None,
+    raw_clips: Optional[List[str]] = None,
+    progress_cb: Optional[Callable[[str], Any]] = None
+) -> Dict[str, Any]:
+    """
+    Renders Tab.bot's exact Multi-Scene Build-in-Public Launch Reel (50s narrative storyboard)
+    with live mobile app screenshots, 3D phones, progressive headers, and real-time yellow karaoke subtitles.
+    """
+    from playwright.async_api import async_playwright
+
+    ffmpeg_bin = get_ffmpeg_path()
+    temp_dir = Path(tempfile.mkdtemp(prefix="tab_multiscene_"))
+    out_video = OUTPUT_DIR / f"tab_story_{uuid.uuid4().hex[:8]}.mp4"
+
+    # Auto-extract URL if embedded in topic
+    if not website_url:
+        website_url = _extract_url_from_text(topic)
+    clean_topic = topic.split("http")[0].split("(")[0].strip() or "VARTAA"
+    domain_display = website_url.replace("https://", "").replace("http://", "").split("/")[0] if website_url else f"{clean_topic.lower()}.com"
+
+    try:
+        # Step 1: Capture live mobile screenshots from URL
+        b64_welcome = ""
+        b64_features = ""
+        if website_url:
+            if progress_cb:
+                await progress_cb(f"🌐 Scraping real mobile UI from {website_url}...")
+            screens = await capture_app_screens(website_url)
+            w_path = screens.get("welcome")
+            f_path = screens.get("features")
+            if w_path and Path(w_path).exists():
+                with open(w_path, "rb") as f:
+                    b64_welcome = base64.b64encode(f.read()).decode("utf-8")
+            if f_path and Path(f_path).exists():
+                with open(f_path, "rb") as f:
+                    b64_features = base64.b64encode(f.read()).decode("utf-8")
+
+        # Step 2: Define the 6-Scene Narrative Storyboard
+        chosen_voice = voice or ("hi-IN-MadhurNeural" if any(w in clean_topic.lower() for w in ["vartaa", "india", "bina"]) else "en-US-ChristopherNeural")
+
+        single_screen_html = f'<img src="data:image/png;base64,{b64_welcome}" class="screen-img"/>' if b64_welcome else '<div style="color:#fff;padding:40px;text-align:center;">Sovereign Privacy</div>'
+        welcome_img_tag = f'<img src="data:image/png;base64,{b64_welcome}" class="screen-img"/>' if b64_welcome else ''
+        features_img_tag = f'<img src="data:image/png;base64,{b64_features}" class="screen-img"/>' if b64_features else ''
+
+        scenes = [
+            # Scene 1: The Big Hook
+            {
+                "id": 1,
+                "progress": "2%",
+                "script": f"Kya aap bhi thak chuke ho har app ko apna phone number dene se?",
+                "content_html": f"""
+                <div class="huge-brand-title">{clean_topic.upper()}</div>
+                <div class="yellow-highlight-box">Bina phone number chat?</div>
+                <div class="handwritten-sub">Privacy ab wapas aayegi.</div>
+                """
+            },
+            # Scene 2: Problem vs Solution Card
+            {
+                "id": 2,
+                "progress": "10%",
+                "script": "Har jagah OTP maangte hain, aur private data leak ho jaata hai.",
+                "content_html": f"""
+                <div class="huge-brand-title">{clean_topic.upper()}</div>
+                <div class="yellow-highlight-box">Bina phone number chat?</div>
+                <div class="handwritten-sub">Privacy ab wapas aayegi.</div>
+                <div class="comparison-row">
+                  <div class="card-cross">
+                    <div class="cross-x">✕</div>
+                    <div class="card-num-text">+91 98XXX</div>
+                    <div class="card-sub-label">Phone OTP</div>
+                  </div>
+                  <div class="arrow-symbol">➔</div>
+                  <div class="card-green">
+                    <div class="card-user-text">@username</div>
+                    <div class="card-priv-label">100% Private</div>
+                  </div>
+                </div>
+                <div class="stamp-box">NO PHONE • NO OTP</div>
+                """
+            },
+            # Scene 3: Single Hero Phone Reveal
+            {
+                "id": 3,
+                "progress": "21%",
+                "script": f"Isliye humne banaya {clean_topic}. India ka apna sovereign private chat platform.",
+                "content_html": f"""
+                <div style="border: 2px solid #dc2626; border-radius: 999px; padding: 6px 20px; color: #0f172a; font-size: 22px; font-weight: 900; font-style: italic; margin-bottom: 24px;">
+                  Made in India Private Chat
+                </div>
+                <div class="phone-frame phone-single">
+                  {single_screen_html}
+                </div>
+                """
+            },
+            # Scene 4: Dual Phones (Onboarding & Identity)
+            {
+                "id": 4,
+                "progress": "35%",
+                "script": "Sirf apna unique username choose karo, aur privacy ke saath chat karo. No phone number, no email.",
+                "content_html": f"""
+                <div class="step-header-row">
+                  <div class="step-pill-title">✅ Sirf @username, Zero OTP</div>
+                  <div class="step-fraction">1/4</div>
+                </div>
+                <div class="comparison-row" style="margin: 10px 0;">
+                  <div class="phone-frame phone-dual" style="transform: rotate(-3deg);">
+                    {welcome_img_tag}
+                  </div>
+                  <div class="phone-frame phone-dual" style="transform: rotate(3deg); background: #090a0f; color: #fff; padding: 20px 16px; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                      <div style="font-size: 13px; color: #94a3b8; margin-bottom: 8px;">← Step 1 of 4</div>
+                      <div style="font-size: 18px; font-weight: 900; margin-bottom: 8px;">Choose your identity</div>
+                      <div style="font-size: 12px; color: #94a3b8; line-height: 1.3; margin-bottom: 12px;">Your username is your permanent global handle.</div>
+                      <div style="background: rgba(255,255,255,0.08); border: 1.5px solid #a855f7; border-radius: 8px; padding: 10px; font-size: 13px; font-weight: 700; color: #a855f7; margin-bottom: 12px;">@thesyedabubakkar</div>
+                      <div style="font-size: 11px; color: #10b981; margin-bottom: 4px;">✔ 3 to 20 characters</div>
+                      <div style="font-size: 11px; color: #10b981; margin-bottom: 4px;">✔ Letters, numbers, underscores</div>
+                      <div style="font-size: 11px; color: #10b981;">✔ Unique & not reserved</div>
+                    </div>
+                    <div style="background: #a855f7; color: #fff; text-align: center; padding: 10px; border-radius: 8px; font-weight: 800; font-size: 13px;">Claim Username</div>
+                  </div>
+                </div>
+                """
+            },
+            # Scene 5: Triple Phone Spread (Fast Chat, HD Media & Groups)
+            {
+                "id": 5,
+                "progress": "54%",
+                "script": "End-to-end encrypted messaging, HD photo sharing, voice notes, aur super-fast private groups.",
+                "content_html": f"""
+                <div class="step-header-row">
+                  <div class="step-pill-title">✅ Fast Chat, HD Media & Groups</div>
+                  <div class="step-fraction">3/4</div>
+                </div>
+                <div class="comparison-row" style="margin: 10px 0; gap: 12px;">
+                  <div class="phone-frame phone-triple" style="transform: rotate(-6deg);">
+                    {welcome_img_tag}
+                  </div>
+                  <div class="phone-frame phone-triple" style="background: #090a0f; color: #fff; padding: 16px 12px; display: flex; flex-direction: column; justify-content: space-between; z-index: 15; box-shadow: 0 30px 60px rgba(0,0,0,0.5);">
+                    <div style="display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+                      <div style="width: 24px; height: 24px; border-radius: 50%; background: #38bdf8;"></div>
+                      <div style="font-size: 12px; font-weight: 800;">Syed Suleman</div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                      <div style="background: rgba(255,255,255,0.1); padding: 6px 10px; border-radius: 8px; font-size: 11px; align-self: flex-start;">assalamualaikum</div>
+                      <div style="background: #a855f7; padding: 6px 10px; border-radius: 8px; font-size: 11px; align-self: flex-end;">walaikum assalam ✨</div>
+                      <div style="background: rgba(255,255,255,0.1); padding: 6px 10px; border-radius: 8px; font-size: 11px; align-self: flex-start;">HD photos sent! 📸</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.05); border-radius: 999px; padding: 6px 10px; font-size: 10px; color: #64748b;">Type message...</div>
+                  </div>
+                  <div class="phone-frame phone-triple" style="transform: rotate(6deg);">
+                    {features_img_tag}
+                  </div>
+                </div>
+                <div style="background: #0f172a; color: #fde047; font-size: 15px; font-weight: 900; padding: 8px 24px; border-radius: 999px; letter-spacing: 1px; margin-top: 14px;">
+                  DARK MODE • 120Hz • VOICE NOTES
+                </div>
+                """
+            },
+            # Scene 6: Call To Action
+            {
+                "id": 6,
+                "progress": "81%",
+                "script": f"{clean_topic} Android APK abhi live hai {domain_display} par. Download karo aur apni privacy wapas lo.",
+                "content_html": f"""
+                <div class="handwritten-sub" style="font-size: 34px; font-weight: 900; margin-bottom: 24px;">Abhi kaise try karein?</div>
+                <div class="cta-card">
+                  <div class="cta-heading">{clean_topic.upper()} ANDROID APK</div>
+                  <div class="cta-url-box">{domain_display}</div>
+                  <div class="cta-live-sub">Direct APK download abhi live hai</div>
+                  <div class="cta-soon-sub">Google Play Store launch jald aa raha hai</div>
+                  <div style="display: flex; justify-content: center; gap: 16px; margin-top: 8px;">
+                    <div class="stamp-box stamp-green">APK LIVE NOW</div>
+                    <div class="stamp-box">PLAY STORE SOON</div>
+                  </div>
+                </div>
+                """
+            }
+        ]
+
+        # Step 3: Synthesize Speech & ASS Karaoke per Scene
+        if progress_cb:
+            await progress_cb(f"🎙️ Synthesizing 6-scene voiceover & word-level karaoke ({chosen_voice.split('-')[0].upper()})...")
+
+        scene_video_clips = []
+        scene_audio_files = []
+        total_timeline = 0.0
+        ass_dialogue_lines = []
+
+        # Start Playwright to take high-res snapshots for each scene
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=settings.BROWSER_HEADLESS,
+                args=["--disable-gpu", "--disable-dev-shm-usage", "--no-sandbox", "--renderer-process-limit=1"]
+            )
+            page = await browser.new_page(viewport={"width": 720, "height": 1280})
+
+            for sc in scenes:
+                sc_id = sc["id"]
+                sc_script = sc["script"]
+                sc_audio = temp_dir / f"scene_{sc_id}.mp3"
+                sc_ass = temp_dir / f"scene_{sc_id}.ass"
+
+                # Generate speech + boundary events
+                k_data = await generate_karaoke_audio_and_ass(
+                    text=sc_script,
+                    voice=chosen_voice,
+                    audio_path=sc_audio,
+                    ass_path=sc_ass,
+                    highlight_color="&H0015CCFA",
+                    font_size=44,
+                    margin_v=140
                 )
-                page = await browser.new_page(viewport={"width": 720, "height": 1280})
-                await page.set_content(html_canvas, wait_until="domcontentloaded", timeout=8000)
-                await page.wait_for_timeout(200)
-                await page.screenshot(path=str(snapshot_path))
-                await browser.close()
+                dur = k_data["duration"]
+                sc["duration"] = dur
+                scene_audio_files.append(sc_audio)
 
-            # 7. Master FFmpeg Muxing: Snapshot + Kinetic Zoom + Audio Ducking + ASS Karaoke
-            if progress_cb:
-                await progress_cb("🎬 Compositing master reel with real-time yellow karaoke subtitles...")
+                # Render HTML Page for Scene
+                html = _get_base_html(
+                    header_day=f"{clean_topic.upper()} DAY {day_number}",
+                    progress_pct=sc["progress"],
+                    date_text="22 NOV 2026",
+                    content_html=sc["content_html"]
+                )
+                sc_snap = temp_dir / f"snap_{sc_id}.png"
+                await page.set_content(html, wait_until="domcontentloaded")
+                await page.screenshot(path=str(sc_snap))
 
-            safe_ass = str(ass_path).replace("\\", "/").replace(":", r"\:")
-            vf_filter = f"zoompan=z='min(zoom+0.0006,1.04)':d=125:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=720x1280:fps=24,ass='{safe_ass}'"
-            
-            # Mix voice with background lo-fi beat (ducked by -16dB)
-            final_cmd = [
-                ffmpeg_bin, "-y",
-                "-loop", "1", "-i", str(snapshot_path),
-                "-i", str(audio_path),
-                "-i", str(bg_music),
-                "-filter_complex",
-                f"[0:v]{vf_filter}[v];[2:a]volume=0.15[bg];[1:a][bg]amix=inputs=2:duration=first[a]",
-                "-map", "[v]",
-                "-map", "[a]",
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-                "-c:a", "aac", "-b:a", "192k",
-                "-t", str(audio_dur),
-                "-pix_fmt", "yuv420p",
-                "-movflags", "+faststart",
-                str(out_video)
-            ]
-            res = subprocess.run(final_cmd, capture_output=True, text=True)
-            if res.returncode != 0:
-                logger.error(f"FFmpeg muxing failed: {res.stderr}")
-                raise RuntimeError(f"FFmpeg error: {res.stderr}")
+                # Render individual video clip for this scene (loop image for duration)
+                sc_clip = temp_dir / f"clip_{sc_id}.mp4"
+                cmd_clip = [
+                    ffmpeg_bin, "-y",
+                    "-loop", "1", "-i", str(sc_snap),
+                    "-t", str(dur),
+                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+                    "-pix_fmt", "yuv420p",
+                    str(sc_clip)
+                ]
+                subprocess.run(cmd_clip, capture_output=True, check=True)
+                scene_video_clips.append(sc_clip)
 
-            return {
-                "status": "success",
-                "video_path": str(out_video),
-                "duration": audio_dur,
-                "pipeline": "app_launch",
-                "topic": topic,
-                "voice": chosen_voice
-            }
+                # Parse ASS dialogue lines and offset by total_timeline
+                with open(sc_ass, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.startswith("Dialogue:"):
+                            parts = line.split(",", 9)
+                            if len(parts) == 10:
+                                # Parse start & end
+                                def parse_t(ts):
+                                    h, m, s = ts.split(":")
+                                    return int(h)*3600 + int(m)*60 + float(s)
+                                s_t = parse_t(parts[1]) + total_timeline
+                                e_t = parse_t(parts[2]) + total_timeline
+                                parts[1] = _format_ass_time(s_t)
+                                parts[2] = _format_ass_time(e_t)
+                                ass_dialogue_lines.append(",".join(parts))
 
-        # -------------------------------------------------------------
-        # PIPELINE B: RAW FOOTAGE MONTAGE & RECAP (Joshua Tree / Vacation Style)
-        # -------------------------------------------------------------
-        elif chosen_pipeline == "footage_recap":
-            if progress_cb:
-                await progress_cb(f"🌴 Pipeline B: Cutting raw footage montage for '{topic}'...")
+                total_timeline += dur
 
-            clip_inputs = raw_clips or []
-            # Synthesize voice narration
-            chosen_voice = voice or "en-US-ChristopherNeural"
-            script = script_text or f"Here is your 30-second highlight recap from {topic}. Captured warm, slow, and unhurried."
-            audio_path = temp_dir / "voice.mp3"
-            ass_path = temp_dir / "karaoke.ass"
-            karaoke_data = await generate_karaoke_audio_and_ass(
-                text=script, voice=chosen_voice, audio_path=audio_path, ass_path=ass_path, font_size=38, margin_v=110
-            )
-            audio_dur = karaoke_data["duration"]
-            bg_music = temp_dir / "ambient.mp3"
-            generate_ambient_soundtrack(duration=audio_dur + 1.0, genre="tech_ambient", save_path=bg_music)
+            await browser.close()
 
-            # Generate elegant visual recap with FFmpeg color wash and cross-fades
-            safe_ass = str(ass_path).replace("\\", "/").replace(":", r"\:")
-            vf = f"color=c=0x18181b:s=720x1280:d={audio_dur},drawbox=y=ih/3:color=white@0.05:width=iw:height=300:t=fill,drawtext=text='{topic}':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/2-50,ass='{safe_ass}'"
-            final_cmd = [
-                ffmpeg_bin, "-y",
-                "-f", "lavfi", "-i", vf,
-                "-i", str(audio_path),
-                "-i", str(bg_music),
-                "-filter_complex", "[2:a]volume=0.2[bg];[1:a][bg]amix=inputs=2:duration=first[a]",
-                "-map", "0:v", "-map", "[a]",
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-                "-c:a", "aac", "-b:a", "192k",
-                "-t", str(audio_dur),
-                "-pix_fmt", "yuv420p",
-                str(out_video)
-            ]
-            subprocess.run(final_cmd, capture_output=True, check=True)
-            return {
-                "status": "success",
-                "video_path": str(out_video),
-                "duration": audio_dur,
-                "pipeline": "footage_recap",
-                "topic": topic
-            }
+        # Step 4: Write Global Master ASS Subtitle File
+        master_ass = temp_dir / "master_subtitles.ass"
+        ass_header = [
+            "[Script Info]",
+            "ScriptType: v4.00+",
+            "PlayResX: 720",
+            "PlayResY: 1280",
+            "ScaledBorderAndShadow: yes",
+            "",
+            "[V4+ Styles]",
+            "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+            "Style: KaraokeYellow,Arial,44,&H0015CCFA,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3.5,2,2,40,40,140,1",
+            "",
+            "[Events]",
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
+        ]
+        with open(master_ass, "w", encoding="utf-8") as f:
+            f.write("\n".join(ass_header + ass_dialogue_lines))
 
-        # -------------------------------------------------------------
-        # PIPELINE C: KINETIC ANIMATED EXPLAINER (Tutorials & How-To)
-        # -------------------------------------------------------------
-        elif chosen_pipeline == "animated_explainer":
-            if progress_cb:
-                await progress_cb(f"💡 Pipeline C: Generating kinetic animated explainer for '{topic}'...")
+        # Step 5: Concat Video Clips
+        if progress_cb:
+            await progress_cb(f"🎬 Concatenating 6 narrative scenes ({total_timeline:.1f}s)...")
 
-            chosen_voice = voice or "en-US-JennyNeural"
-            script = script_text or f"How does {topic} actually work? Here is the complete breakdown in 3 simple steps."
-            audio_path = temp_dir / "voice.mp3"
-            ass_path = temp_dir / "karaoke.ass"
-            karaoke_data = await generate_karaoke_audio_and_ass(
-                text=script, voice=chosen_voice, audio_path=audio_path, ass_path=ass_path, highlight_color="&H00E5C522", font_size=42, margin_v=130
-            )
-            audio_dur = karaoke_data["duration"]
-            bg_music = temp_dir / "ambient.mp3"
-            generate_ambient_soundtrack(duration=audio_dur + 1.0, genre="tech_ambient", save_path=bg_music)
+        concat_list = temp_dir / "concat_list.txt"
+        with open(concat_list, "w", encoding="utf-8") as f:
+            for clip in scene_video_clips:
+                f.write(f"file '{clip.name}'\n")
 
-            html_explainer = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{
-    width: 720px; height: 1280px; overflow: hidden;
-    background: #090a0f; color: #fff;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    padding: 70px 48px; display: flex; flex-direction: column; justify-content: space-between;
-  }}
-  .pill {{ background: rgba(59, 130, 246, 0.2); border: 1px solid #3b82f6; color: #60a5fa; font-weight: 800; font-size: 16px; padding: 8px 18px; border-radius: 999px; width: fit-content; }}
-  .title {{ font-size: 48px; font-weight: 900; line-height: 1.15; margin-top: 20px; }}
-  .card-grid {{ display: flex; flex-direction: column; gap: 18px; margin: 30px 0; }}
-  .card {{ background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 20px; display: flex; align-items: center; gap: 16px; }}
-  .card-num {{ background: #3b82f6; color: #fff; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 20px; }}
-  .card-text {{ font-size: 20px; font-weight: 700; color: #f1f5f9; }}
-</style>
-</head>
-<body>
-  <div>
-    <div class="pill">DEEP DIVE EXPLAINER</div>
-    <div class="title">{topic}</div>
-  </div>
-  <div class="card-grid">
-    <div class="card"><div class="card-num">1</div><div class="card-text">Step 1: Intelligent Decomposition</div></div>
-    <div class="card"><div class="card-num">2</div><div class="card-text">Step 2: Autonomous Tool Orchestration</div></div>
-    <div class="card"><div class="card-num">3</div><div class="card-text">Step 3: Verification & Instant Delivery</div></div>
-  </div>
-  <div style="height: 140px;"></div>
-</body>
-</html>"""
+        raw_merged_video = temp_dir / "merged_raw.mp4"
+        cmd_merge = [
+            ffmpeg_bin, "-y",
+            "-f", "concat", "-safe", "0",
+            "-i", str(concat_list),
+            "-c", "copy",
+            str(raw_merged_video)
+        ]
+        subprocess.run(cmd_merge, capture_output=True, check=True)
 
-            snapshot_path = temp_dir / "scene_snapshot.png"
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=settings.BROWSER_HEADLESS, args=["--no-sandbox", "--disable-dev-shm-usage"])
-                page = await browser.new_page(viewport={"width": 720, "height": 1280})
-                await page.set_content(html_explainer, wait_until="domcontentloaded")
-                await page.screenshot(path=str(snapshot_path))
-                await browser.close()
+        # Step 6: Concat Voice Audio
+        audio_concat_list = temp_dir / "audio_concat.txt"
+        with open(audio_concat_list, "w", encoding="utf-8") as f:
+            for af in scene_audio_files:
+                f.write(f"file '{af.name}'\n")
 
-            safe_ass = str(ass_path).replace("\\", "/").replace(":", r"\:")
-            vf_filter = f"zoompan=z='min(zoom+0.0006,1.04)':d=125:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=720x1280:fps=24,ass='{safe_ass}'"
-            final_cmd = [
-                ffmpeg_bin, "-y",
-                "-loop", "1", "-i", str(snapshot_path),
-                "-i", str(audio_path),
-                "-i", str(bg_music),
-                "-filter_complex", f"[0:v]{vf_filter}[v];[2:a]volume=0.18[bg];[1:a][bg]amix=inputs=2:duration=first[a]",
-                "-map", "[v]", "-map", "[a]",
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-                "-c:a", "aac", "-b:a", "192k",
-                "-t", str(audio_dur),
-                "-pix_fmt", "yuv420p",
-                str(out_video)
-            ]
-            subprocess.run(final_cmd, capture_output=True, check=True)
-            return {
-                "status": "success",
-                "video_path": str(out_video),
-                "duration": audio_dur,
-                "pipeline": "animated_explainer",
-                "topic": topic
-            }
+        master_voice = temp_dir / "master_voice.mp3"
+        cmd_a_merge = [
+            ffmpeg_bin, "-y",
+            "-f", "concat", "-safe", "0",
+            "-i", str(audio_concat_list),
+            "-c", "copy",
+            str(master_voice)
+        ]
+        subprocess.run(cmd_a_merge, capture_output=True, check=True)
 
-        # -------------------------------------------------------------
-        # PIPELINE D: CINEMATIC FILM & SCI-FI TRAILER
-        # -------------------------------------------------------------
-        else:
-            if progress_cb:
-                await progress_cb(f"🌌 Pipeline D: Directing cinematic sci-fi trailer for '{topic}'...")
+        # Step 7: Synthesize Lo-Fi Background Beat
+        bg_music = temp_dir / "lofi_beat.mp3"
+        generate_ambient_soundtrack(duration=total_timeline + 2.0, genre="lofi", save_path=bg_music)
 
-            chosen_voice = voice or "en-GB-RyanNeural"
-            script = script_text or f"In a world where intelligence moves faster than light, {topic} emerges from the silence. The future has already begun."
-            audio_path = temp_dir / "voice.mp3"
-            ass_path = temp_dir / "karaoke.ass"
-            karaoke_data = await generate_karaoke_audio_and_ass(
-                text=script, voice=chosen_voice, audio_path=audio_path, ass_path=ass_path, highlight_color="&H00D97706", font_size=40, margin_v=120
-            )
-            audio_dur = karaoke_data["duration"]
-            bg_music = temp_dir / "cinematic_drone.mp3"
-            generate_ambient_soundtrack(duration=audio_dur + 1.0, genre="cinematic", save_path=bg_music)
+        # Step 8: Final Master Encoding with Word-Level ASS Karaoke Overlay and Audio Ducking
+        if progress_cb:
+            await progress_cb("✨ Rendering master 9:16 viral reel with active yellow karaoke subtitles...")
 
-            html_cinematic = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{
-    width: 720px; height: 1280px; overflow: hidden;
-    background: radial-gradient(circle at center, #1e1b4b 0%, #030712 100%);
-    color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', serif;
-    padding: 80px 48px; display: flex; flex-direction: column; justify-content: space-between;
-  }}
-  .letterbox-top {{ position: absolute; top: 0; left: 0; right: 0; height: 100px; background: #000; }}
-  .letterbox-bot {{ position: absolute; bottom: 0; left: 0; right: 0; height: 100px; background: #000; }}
-  .series-tag {{ letter-spacing: 5px; font-weight: 800; font-size: 16px; color: #a855f7; text-transform: uppercase; }}
-  .film-title {{ font-size: 58px; font-weight: 900; line-height: 1.05; letter-spacing: -1px; margin-top: 24px; }}
-  .film-sub {{ font-size: 24px; color: #cbd5e1; font-weight: 500; margin-top: 16px; }}
-</style>
-</head>
-<body>
-  <div class="letterbox-top"></div>
-  <div class="letterbox-bot"></div>
-  <div>
-    <div class="series-tag">A PRODUCTION BY OPENTAB</div>
-    <div class="film-title">{topic}</div>
-    <div class="film-sub">Signal From Tomorrow</div>
-  </div>
-  <div style="height: 130px;"></div>
-</body>
-</html>"""
+        safe_ass = str(master_ass).replace("\\", "/").replace(":", r"\:")
+        cmd_final = [
+            ffmpeg_bin, "-y",
+            "-i", str(raw_merged_video),
+            "-i", str(master_voice),
+            "-i", str(bg_music),
+            "-filter_complex",
+            f"[0:v]ass='{safe_ass}'[v];[2:a]volume=0.15[bg];[1:a][bg]amix=inputs=2:duration=first[a]",
+            "-map", "[v]",
+            "-map", "[a]",
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+            "-c:a", "aac", "-b:a", "192k",
+            "-t", str(total_timeline),
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            str(out_video)
+        ]
+        subprocess.run(cmd_final, capture_output=True, check=True)
 
-            snapshot_path = temp_dir / "scene_snapshot.png"
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=settings.BROWSER_HEADLESS, args=["--no-sandbox", "--disable-dev-shm-usage"])
-                page = await browser.new_page(viewport={"width": 720, "height": 1280})
-                await page.set_content(html_cinematic, wait_until="domcontentloaded")
-                await page.screenshot(path=str(snapshot_path))
-                await browser.close()
-
-            safe_ass = str(ass_path).replace("\\", "/").replace(":", r"\:")
-            vf_filter = f"zoompan=z='min(zoom+0.0006,1.04)':d=125:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=720x1280:fps=24,ass='{safe_ass}'"
-            final_cmd = [
-                ffmpeg_bin, "-y",
-                "-loop", "1", "-i", str(snapshot_path),
-                "-i", str(audio_path),
-                "-i", str(bg_music),
-                "-filter_complex", f"[0:v]{vf_filter}[v];[2:a]volume=0.25[bg];[1:a][bg]amix=inputs=2:duration=first[a]",
-                "-map", "[v]", "-map", "[a]",
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-                "-c:a", "aac", "-b:a", "192k",
-                "-t", str(audio_dur),
-                "-pix_fmt", "yuv420p",
-                str(out_video)
-            ]
-            subprocess.run(final_cmd, capture_output=True, check=True)
-            return {
-                "status": "success",
-                "video_path": str(out_video),
-                "duration": audio_dur,
-                "pipeline": "cinematic_film",
-                "topic": topic
-            }
+        logger.info(f"OpenTab Tab.bot Reel rendered successfully ({total_timeline:.1f}s) -> {out_video}")
+        return {
+            "status": "success",
+            "video_path": str(out_video),
+            "duration": total_timeline,
+            "pipeline": "app_launch",
+            "topic": clean_topic,
+            "scenes": len(scenes)
+        }
 
     except Exception as e:
-        logger.error(f"Error in build_tab_video ({chosen_pipeline}): {e}", exc_info=True)
-        return {"status": "error", "error": str(e), "pipeline": chosen_pipeline}
+        logger.error(f"Error building Tab video: {e}", exc_info=True)
+        return {"status": "error", "error": str(e)}
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)

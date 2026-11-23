@@ -62,7 +62,7 @@ async def generate_karaoke_audio_and_ass(
         "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        f"Style: KaraokeYellow,Arial,{font_size},{base_color},{highlight_color},&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3.5,2,2,40,40,{margin_v},1",
+        f"Style: KaraokeYellow,Arial,{font_size},{highlight_color},{base_color},&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3.5,2,2,40,40,{margin_v},1",
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
