@@ -61,6 +61,19 @@ async def main():
             asyncio.create_task(wa.start())
             print(f"[+] HTTP Server & Health Check listening on port {settings.PORT}.")
 
+            # 24/7 Keep-Alive self ping (prevents Render Free Tier from sleeping)
+            async def _keep_alive():
+                import httpx
+                await asyncio.sleep(60)
+                while True:
+                    try:
+                        async with httpx.AsyncClient(timeout=30) as client:
+                            await client.get("https://opentab-agent.onrender.com/health")
+                    except Exception:
+                        pass
+                    await asyncio.sleep(540) # Every 9 minutes
+            asyncio.create_task(_keep_alive())
+
         print("\n[*] OpenTab daemon is running. Press Ctrl+C to exit.\n")
         # Keep process alive
         stop_event = asyncio.Event()
