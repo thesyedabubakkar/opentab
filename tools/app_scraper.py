@@ -55,6 +55,7 @@ async def capture_app_screens(url: str, domain_tag: Optional[str] = None) -> Dic
                     "--no-first-run",
                     "--no-zygote",
                     "--renderer-process-limit=1",
+                    "--single-process",
                     "--disable-extensions",
                     "--disable-background-networking"
                 ]

@@ -404,7 +404,16 @@ async def build_tab_video(
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=settings.BROWSER_HEADLESS,
-                args=["--disable-gpu", "--disable-dev-shm-usage", "--no-sandbox", "--renderer-process-limit=1"]
+                args=[
+                    "--disable-gpu",
+                    "--disable-dev-shm-usage",
+                    "--no-sandbox",
+                    "--renderer-process-limit=1",
+                    "--single-process",
+                    "--no-zygote",
+                    "--no-first-run",
+                    "--disable-extensions"
+                ]
             )
             page = await browser.new_page(viewport={"width": 720, "height": 1280})
 
@@ -502,7 +511,7 @@ async def build_tab_video(
             "-c", "copy",
             str(master_voice)
         ]
-        subprocess.run(cmd_a_merge, capture_output=True, timeout=20, check=True)
+        await asyncio.to_thread(subprocess.run, cmd_a_merge, capture_output=True, timeout=20, check=True)
 
         # Step 6: Create Concat Demuxer for 6 Scene Images with exact durations
         concat_scenes_txt = temp_dir / "concat_scenes.txt"
@@ -517,7 +526,7 @@ async def build_tab_video(
 
         # Step 7: Synthesize Lo-Fi Background Beat
         bg_music = temp_dir / "lofi_beat.mp3"
-        generate_ambient_soundtrack(duration=total_timeline + 2.0, genre="lofi", save_path=bg_music)
+        await asyncio.to_thread(generate_ambient_soundtrack, duration=total_timeline + 2.0, genre="lofi", save_path=bg_music)
 
         # Step 8: Single-Pass Master Timeline Compositor with ASS Karaoke and Audio Ducking
         if progress_cb:
@@ -543,7 +552,7 @@ async def build_tab_video(
             "-movflags", "+faststart",
             str(out_video)
         ]
-        res = subprocess.run(cmd_final, capture_output=True, timeout=60)
+        res = await asyncio.to_thread(subprocess.run, cmd_final, capture_output=True, timeout=60)
         if res.returncode != 0:
             logger.error(f"FFmpeg single-pass master encoding failed: {res.stderr}")
             # Fallback without ass filter if libass is unavailable
@@ -563,7 +572,7 @@ async def build_tab_video(
                 "-movflags", "+faststart",
                 str(out_video)
             ]
-            subprocess.run(cmd_fallback, capture_output=True, timeout=60, check=True)
+            await asyncio.to_thread(subprocess.run, cmd_fallback, capture_output=True, timeout=60, check=True)
 
         logger.info(f"OpenTab Tab.bot Reel rendered successfully ({total_timeline:.1f}s) -> {out_video}")
         return {

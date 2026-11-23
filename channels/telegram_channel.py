@@ -66,7 +66,7 @@ class TelegramChannel(BaseChannel):
         logger.info("Starting Telegram Bot long-polling...")
         await self.app.initialize()
         await self.app.start()
-        await self.app.updater.start_polling(drop_pending_updates=False)
+        await self.app.updater.start_polling(drop_pending_updates=True)
 
     async def stop(self):
         if self.app:

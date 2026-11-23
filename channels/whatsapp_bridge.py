@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 from typing import Optional
 from aiohttp import web
 import httpx
@@ -14,20 +15,34 @@ class WhatsAppBridge(BaseChannel):
         self.engine = engine
         self.port = settings.PORT
         self.node_service_url = f"http://localhost:{settings.WHATSAPP_PORT}/send"
+        self._thread: Optional[threading.Thread] = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._runner: Optional[web.AppRunner] = None
         self._pending_approvals = {}  # sender -> approval_id
 
     async def start(self):
-        app = web.Application()
-        app.router.add_get("/", self._handle_health)
-        app.router.add_get("/health", self._handle_health)
-        app.router.add_post("/webhook/whatsapp", self._handle_webhook)
+        """Starts HTTP server in a dedicated background thread so /health check is never blocked."""
+        ready_evt = threading.Event()
 
-        self._runner = web.AppRunner(app)
-        await self._runner.setup()
-        site = web.TCPSite(self._runner, "0.0.0.0", self.port)
-        await site.start()
-        logger.info(f"OpenTab HTTP server & webhook listening on port {self.port}...")
+        def _run_server():
+            self._loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self._loop)
+            app = web.Application()
+            app.router.add_get("/", self._handle_health)
+            app.router.add_get("/health", self._handle_health)
+            app.router.add_post("/webhook/whatsapp", self._handle_webhook)
+
+            self._runner = web.AppRunner(app)
+            self._loop.run_until_complete(self._runner.setup())
+            site = web.TCPSite(self._runner, "0.0.0.0", self.port)
+            self._loop.run_until_complete(site.start())
+            logger.info(f"OpenTab HTTP health server & webhook listening on port {self.port} (dedicated thread)...")
+            ready_evt.set()
+            self._loop.run_forever()
+
+        self._thread = threading.Thread(target=_run_server, daemon=True, name="HTTPHealthThread")
+        self._thread.start()
+        ready_evt.wait(timeout=5.0)
 
     async def _handle_health(self, request: web.Request) -> web.Response:
         return web.json_response({
@@ -38,8 +53,10 @@ class WhatsAppBridge(BaseChannel):
         })
 
     async def stop(self):
-        if self._runner:
-            await self._runner.cleanup()
+        if self._runner and self._loop:
+            asyncio.run_coroutine_threadsafe(self._runner.cleanup(), self._loop)
+        if self._loop:
+            self._loop.call_soon_threadsafe(self._loop.stop)
 
     async def send_message(
         self,
