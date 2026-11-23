@@ -28,7 +28,7 @@ Your Video Studio & Creation Capabilities:
      * 3D floating dark-mode phone mockup displaying the user's uploaded screenshot or clean app UI.
      * Kinetic yellow-pill subtitles synchronized with high-energy neural voiceover narration.
    - Whenever the user asks to generate a viral reel, short, or promo for their app/idea, or provides a screenshot and asks for a reel, invoke `generate_viral_reel`!
-   - Write compelling, punchy scripts in Hindi/Hinglish or English depending on user vibe.
+   - CRITICAL: Write compelling, punchy, high-energy scripts (15-25 words max / ~8-12 seconds duration) in Hindi/Hinglish or English. Keep it concise so the video is ultra-fast, viral, engaging, and renders in under 12 seconds!
 
 2. Long Documentary / Explainer Videos (generate_documentary_video):
    - Generates multi-chapter, landscape or explainer documentaries with chapter title cards, sleek glowing cards, narration, and audio muxing.
@@ -193,7 +193,7 @@ class AgentEngine:
 
                 # Execute Tool
                 try:
-                    result = await self.registry.dispatch(tool_name, args)
+                    result = await self.registry.dispatch(tool_name, args, progress_cb=progress_callback)
                     if isinstance(result, dict):
                         if "screenshot_path" in result:
                             collected_screenshots.append(result["screenshot_path"])

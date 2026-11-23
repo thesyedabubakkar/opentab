@@ -40,7 +40,7 @@ class ToolRegistry:
         schemas.extend(self.composio.get_schemas())
         return schemas
 
-    async def dispatch(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+    async def dispatch(self, tool_name: str, arguments: Dict[str, Any], progress_cb: Optional[Any] = None) -> Any:
         """Dispatches tool execution by name with parsed arguments."""
         logger.info(f"Dispatching tool '{tool_name}' with arguments: {arguments}")
 
@@ -67,7 +67,8 @@ class ToolRegistry:
                 screenshot_path=shot,
                 day_number=int(arguments.get("day_number", 1)),
                 progress_pct=int(arguments.get("progress_pct", 29)),
-                voice=arguments.get("voice", "hi-IN-MadhurNeural")
+                voice=arguments.get("voice", "hi-IN-MadhurNeural"),
+                progress_cb=progress_cb
             )
 
         # Video Generation - Multi-Chapter Documentary
