@@ -55,19 +55,21 @@ class ToolRegistry:
         elif tool_name == "generate_viral_reel":
             shot = arguments.get("screenshot_path") or self.latest_screenshot
             return await build_viral_reel(
-                product_name=arguments.get("product_name", "VARTAA"),
-                hook_title=arguments.get("hook_title", "Bina phone number chat?"),
-                tagline=arguments.get("tagline", "Privacy ab wapas aayegi."),
-                old_label=arguments.get("old_label", "+91 98XXX Phone OTP"),
-                old_sub=arguments.get("old_sub", "Data leak risk"),
-                new_label=arguments.get("new_label", "@username"),
-                new_sub=arguments.get("new_sub", "100% Private"),
-                stamp_text=arguments.get("stamp_text", "NO PHONE · NO OTP"),
-                script_text=arguments.get("script_text", "Phone number se sign up karke privacy ka tamasha khatam."),
+                product_name=arguments.get("product_name", "OpenTab"),
+                hook_title=arguments.get("hook_title", "The Future of AI"),
+                tagline=arguments.get("tagline", "Autonomous intelligence for everyone."),
+                old_label=arguments.get("old_label", "Manual Work"),
+                old_sub=arguments.get("old_sub", "Slow & repetitive"),
+                new_label=arguments.get("new_label", "AI Autopilot"),
+                new_sub=arguments.get("new_sub", "100% Autonomous"),
+                stamp_text=arguments.get("stamp_text", "AI REVOLUTION"),
+                script_text=arguments.get("script_text", "Stop doing manual work. Automate everything hands-free with AI."),
                 screenshot_path=shot,
                 day_number=int(arguments.get("day_number", 1)),
-                progress_pct=int(arguments.get("progress_pct", 29)),
-                voice=arguments.get("voice", "hi-IN-MadhurNeural"),
+                progress_pct=int(arguments.get("progress_pct", 50)),
+                voice=arguments.get("voice", "en-US-ChristopherNeural"),
+                theme=arguments.get("theme", "dark_glass"),
+                accent_color=arguments.get("accent_color", "#6366f1"),
                 progress_cb=progress_cb
             )
 
