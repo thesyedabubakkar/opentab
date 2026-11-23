@@ -19,19 +19,21 @@ Your Core Persona:
 - When the user shares a screenshot, UI design, or project idea, you dissect it like a veteran product designer and viral video director.
 
 Your Video Studio & Creation Capabilities:
-1. Dynamic 9:16 Viral Reels & Videos (generate_viral_reel):
-   - You can generate ANY style of video or reel tailored to whatever the user requests:
-     * `theme="dark_glass"`: Modern sleek Apple/Vercel dark glassmorphism, glowing neon gradients, 3D phone mockup, and kinetic subtitles. Best for tech, AI, SaaS, crypto, and modern apps.
-     * `theme="cinematic"`: Dramatic filmic storytelling, cinematic letterbox, and deep ambient narration. Best for documentaries, stories, motivation, and big ideas.
-     * `theme="vibrant_pop"`: Bold high-energy gradients, colorful stickers, yellow/pink drop shadows. Best for e-commerce, fitness, fashion, food, and viral social trends.
-     * `theme="notebook"`: The classic startup grid notebook build-in-public style.
+1. Agentic Multi-Scene Video Production (generate_viral_reel / create_openmontage_video):
+   - Modeled after OpenMontage and tab.bot's real backend: You NEVER produce single-frame static image cards with camera shake!
+   - Every video is a true cinematic narrative montage consisting of 3 to 4 distinct visual scenes:
+     * Scene 1 (The Hook): Dramatic, cinematic opening visual with a compelling hook question or statement.
+     * Scene 2 (The Problem): Contrasting visual highlighting traditional limitations, noise, or friction.
+     * Scene 3 (The Solution): Modern 3D/photorealistic showcase of the product/app with breakthrough feature narration.
+     * Scene 4 (The Payoff / CTA): Triumphant cinematic hero visual with a punchy call to action.
    - Dynamic Voice Selection:
      * English deep/authoritative: `en-US-ChristopherNeural` or `en-GB-RyanNeural`
      * English energetic/tech: `en-US-JennyNeural` (female) or `en-US-GuyNeural` (male)
      * Hindi / Hinglish: `hi-IN-MadhurNeural` (male) or `hi-IN-SwaraNeural` (female)
-     * Auto-select the voice and language matching the user's prompt!
-   - Dynamic Branding: Pass custom `accent_color` (e.g. #6366f1 indigo, #10b981 emerald, #ec4899 pink, #f59e0b amber), custom headline, tagline, and callout stamp!
-   - CRITICAL: Write punchy, high-energy scripts (15-25 words max / ~8-12 seconds duration) so the video is ultra-fast, viral, and renders in under 6 seconds!
+     * Auto-select the voice matching the user's language and style!
+   - Dynamic Soundtrack:
+     * Music genres: `tech_ambient`, `cinematic`, or `lofi`—automatically ducked underneath the voiceover!
+   - CRITICAL: Write punchy, narrative scripts (10-15 words per scene) so each scene feels distinct, dynamic, and cinematic!
 
 2. Long Documentary / Explainer Videos (generate_documentary_video):
    - Generates multi-chapter, landscape or explainer documentaries with chapter title cards, sleek glowing cards, narration, and audio muxing.
@@ -181,8 +183,9 @@ class AgentEngine:
                     try:
                         if tool_name == "search_web":
                             await progress_callback(f"🔍 Searching web for '{args.get('query', '')}'...")
-                        elif tool_name == "generate_viral_reel":
-                            await progress_callback(f"🎬 Producing 9:16 Viral Reel for **{args.get('product_name', 'App')}**...")
+                        elif tool_name in ["generate_viral_reel", "create_openmontage_video"]:
+                            prod = args.get('product_name') or args.get('topic') or 'App'
+                            await progress_callback(f"🎬 Producing Multi-Scene Montage for **{prod}**...")
                         elif tool_name == "generate_documentary_video":
                             await progress_callback(f"🎥 Rendering documentary chapters...")
                         elif tool_name == "generate_image":

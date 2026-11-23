@@ -98,11 +98,15 @@ class LLMClient:
                 async with httpx.AsyncClient(timeout=self.timeout) as client:
                     try:
                         res = await client.post(endpoint, json=payload, headers=cfg["headers"])
-                        if res.status_code == 413:
-                            logger.warning(f"Payload too large (413) on {cfg['model']}. Pruning message history and retrying...")
+                        if res.status_code in (400, 413):
+                            logger.warning(f"Client error ({res.status_code}) on {cfg['model']}. Pruning message history and retrying...")
                             sys_msgs = [m for m in payload.get("messages", []) if m.get("role") == "system"]
                             user_msgs = [m for m in payload.get("messages", []) if m.get("role") == "user"]
                             payload["messages"] = (sys_msgs[:1] + user_msgs[-1:]) if user_msgs else sys_msgs
+                            # Also drop tools if 400 persisted
+                            if attempt > 0:
+                                payload.pop("tools", None)
+                                payload.pop("tool_choice", None)
                             continue
 
                         if res.status_code == 429:

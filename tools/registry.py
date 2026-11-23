@@ -12,10 +12,32 @@ from tools.media_gen_tool import (
     MEDIA_SCHEMAS
 )
 from tools.reel_builder import build_viral_reel, VIRAL_REEL_SCHEMA
+from tools.montage_compositor import build_openmontage_video
+from core.storyboard import VideoProductionPlan, Scene, generate_default_storyboard
 from tools.documentary_builder import build_documentary_video, DOCUMENTARY_SCHEMA
 from tools.composio_tool import ComposioToolHub
 
 logger = logging.getLogger(__name__)
+
+OPENMONTAGE_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "create_openmontage_video",
+        "description": "Generates a true multi-scene cinematic video montage with distinct visual cuts, neural voiceover per scene, and ambient music ducking (inspired by OpenMontage/tab.bot). Use for all video reels, shorts, stories, and marketing videos.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string", "description": "Topic, brand, or product name"},
+                "hook_title": {"type": "string", "description": "Catchy dramatic hook question or opening headline"},
+                "script_text": {"type": "string", "description": "Narrative spoken voiceover script (30-50 words)"},
+                "aspect_ratio": {"type": "string", "enum": ["9:16", "16:9"], "description": "Aspect ratio: '9:16' for vertical Reels/Shorts/TikTok, or '16:9' for widescreen"},
+                "music_genre": {"type": "string", "enum": ["tech_ambient", "cinematic", "lofi"], "description": "Ambient soundtrack genre"},
+                "voice": {"type": "string", "description": "Neural voice name (e.g. 'en-US-ChristopherNeural', 'en-US-JennyNeural', 'hi-IN-MadhurNeural')"}
+            },
+            "required": ["topic"]
+        }
+    }
+}
 
 class ToolRegistry:
     def __init__(self):
@@ -35,6 +57,7 @@ class ToolRegistry:
             PREFERENCE_SCHEMA,
             *MEDIA_SCHEMAS,
             VIRAL_REEL_SCHEMA,
+            OPENMONTAGE_SCHEMA,
             DOCUMENTARY_SCHEMA
         ]
         schemas.extend(self.composio.get_schemas())
@@ -51,25 +74,69 @@ class ToolRegistry:
                 max_results=int(arguments.get("max_results", 5))
             )
 
-        # Video Generation - 9:16 Viral Reel
-        elif tool_name == "generate_viral_reel":
+        # Video Generation - OpenMontage Multi-Scene Cinematic Production
+        elif tool_name in ["generate_viral_reel", "create_openmontage_video"]:
+            product_name = arguments.get("product_name") or arguments.get("topic") or "OpenTab"
+            hook_title = arguments.get("hook_title") or f"The Future of {product_name}"
+            script_text = arguments.get("script_text") or arguments.get("script") or ""
+            voice = arguments.get("voice") or "en-US-ChristopherNeural"
+            theme = arguments.get("theme") or "dark_glass"
+            genre = arguments.get("music_genre") or ("tech_ambient" if theme == "dark_glass" else ("cinematic" if theme == "cinematic" else "lofi"))
+            aspect_ratio = arguments.get("aspect_ratio", "9:16")
             shot = arguments.get("screenshot_path") or self.latest_screenshot
-            return await build_viral_reel(
-                product_name=arguments.get("product_name", "OpenTab"),
-                hook_title=arguments.get("hook_title", "The Future of AI"),
-                tagline=arguments.get("tagline", "Autonomous intelligence for everyone."),
-                old_label=arguments.get("old_label", "Manual Work"),
-                old_sub=arguments.get("old_sub", "Slow & repetitive"),
-                new_label=arguments.get("new_label", "AI Autopilot"),
-                new_sub=arguments.get("new_sub", "100% Autonomous"),
-                stamp_text=arguments.get("stamp_text", "AI REVOLUTION"),
-                script_text=arguments.get("script_text", "Stop doing manual work. Automate everything hands-free with AI."),
-                screenshot_path=shot,
-                day_number=int(arguments.get("day_number", 1)),
-                progress_pct=int(arguments.get("progress_pct", 50)),
-                voice=arguments.get("voice", "en-US-ChristopherNeural"),
-                theme=arguments.get("theme", "dark_glass"),
-                accent_color=arguments.get("accent_color", "#6366f1"),
+
+            # Construct high-converting 4-scene narrative storyboard
+            hook_script = hook_title if len(hook_title) > 10 else f"What if everything you knew about {product_name} was about to change?"
+            solution_script = script_text if script_text else f"Meet {product_name}. Built from the ground up for speed, elegance, and total autonomy."
+            cta_script = f"Experience the future of {product_name} today."
+
+            plan = VideoProductionPlan(
+                title=product_name,
+                aspect_ratio=aspect_ratio,
+                music_genre=genre,
+                voice_name=voice,
+                scenes=[
+                    Scene(
+                        scene_id=1,
+                        title="The Hook",
+                        duration=3.5,
+                        voice_script=hook_script,
+                        visual_prompt=f"cinematic dramatic opening shot of {product_name}, 8k, volumetric lighting, photorealistic, futuristic dark atmosphere",
+                        motion_type="zoom_in"
+                    ),
+                    Scene(
+                        scene_id=2,
+                        title="The Problem",
+                        duration=4.0,
+                        voice_script="Traditional tools are clunky, slow, and full of friction. You deserve something better.",
+                        visual_prompt=f"chaotic cluttered software interface vs sleek dark minimal design, glowing neon accents, 8k",
+                        motion_type="pan_right"
+                    ),
+                    Scene(
+                        scene_id=3,
+                        title="The Solution",
+                        duration=4.5,
+                        voice_script=solution_script,
+                        visual_prompt=f"sleek glowing 3D smartphone displaying modern UI for {product_name}, Unreal Engine 5 render, cinematic depth of field",
+                        motion_type="zoom_in"
+                    ),
+                    Scene(
+                        scene_id=4,
+                        title="The Payoff",
+                        duration=3.5,
+                        voice_script=cta_script,
+                        visual_prompt=f"epic cinematic hero shot, glowing sunset horizon, sleek futuristic tech, 8k masterpiece",
+                        motion_type="zoom_out"
+                    )
+                ]
+            )
+
+            return await build_openmontage_video(
+                plan=plan,
+                topic=product_name,
+                aspect_ratio=aspect_ratio,
+                voice=voice,
+                music_genre=genre,
                 progress_cb=progress_cb
             )
 

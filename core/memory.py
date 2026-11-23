@@ -81,15 +81,15 @@ class MemoryManager:
             )
             await db.commit()
 
-    async def get_history(self, session_id: str, limit: int = 20) -> List[Dict[str, Any]]:
-        """Retrieves recent conversation messages in OpenAI format."""
+    async def get_history(self, session_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Retrieves clean conversational dialogue (user and assistant messages) for context without breaking tool order."""
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 """
-                SELECT role, content, tool_calls, tool_call_id
+                SELECT role, content
                 FROM messages
-                WHERE session_id = ?
+                WHERE session_id = ? AND role IN ('user', 'assistant') AND content IS NOT NULL AND content != ''
                 ORDER BY id DESC LIMIT ?
                 """,
                 (session_id, limit)
@@ -97,14 +97,7 @@ class MemoryManager:
             rows = await cursor.fetchall()
             history = []
             for r in reversed(rows):
-                item: Dict[str, Any] = {"role": r["role"]}
-                if r["content"]:
-                    item["content"] = r["content"]
-                if r["tool_calls"]:
-                    item["tool_calls"] = json.loads(r["tool_calls"])
-                if r["tool_call_id"]:
-                    item["tool_call_id"] = r["tool_call_id"]
-                history.append(item)
+                history.append({"role": r["role"], "content": r["content"]})
             return history
 
     async def set_profile(self, key: str, value: Any):
