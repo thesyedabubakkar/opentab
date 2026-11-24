@@ -31,7 +31,14 @@ def get_ffmpeg_path() -> str:
 
 def get_audio_duration(audio_file: Path) -> float:
     """Accurately calculates audio duration in seconds using ffprobe or ffmpeg."""
-    # Method A: ffprobe if present
+    return get_media_duration(audio_file)
+
+def get_video_duration(video_file: Path) -> float:
+    """Accurately calculates video duration in seconds using ffprobe or ffmpeg."""
+    return get_media_duration(video_file)
+
+def get_media_duration(media_file: Path) -> float:
+    """Calculates media duration in seconds using ffprobe or ffmpeg."""
     probe = shutil.which("ffprobe")
     if probe:
         try:
@@ -39,7 +46,7 @@ def get_audio_duration(audio_file: Path) -> float:
                 probe, "-v", "error",
                 "-show_entries", "format=duration",
                 "-of", "default=noprint_wrappers=1:nokey=1",
-                str(audio_file)
+                str(media_file)
             ], capture_output=True, text=True)
             val = float(res.stdout.strip())
             if val > 0:
@@ -47,10 +54,9 @@ def get_audio_duration(audio_file: Path) -> float:
         except Exception:
             pass
 
-    # Method B: ffmpeg stderr inspect
     ffmpeg_bin = get_ffmpeg_path()
     try:
-        res = subprocess.run([ffmpeg_bin, "-i", str(audio_file)], capture_output=True, text=True)
+        res = subprocess.run([ffmpeg_bin, "-i", str(media_file)], capture_output=True, text=True)
         m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)", res.stderr)
         if m:
             hours, mins, secs = float(m.group(1)), float(m.group(2)), float(m.group(3))

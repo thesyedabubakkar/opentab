@@ -1,3 +1,7 @@
+from tools.character_consistency_engine import CharacterProfileManager
+from tools.video_deconstructor import VideoDeconstructor
+from tools.motion_transitions import MotionTransitionEngine
+from tools.omniedit_engine import OmniEditEngine
 import asyncio
 import base64
 import logging
@@ -219,6 +223,9 @@ async def build_tab_video(
     progress_pct: int = 91,
     stamp_text: Optional[str] = None,
     raw_clips: Optional[List[str]] = None,
+    user_id: Optional[str] = None,
+    reference_video: Optional[str] = None,
+    use_transitions: bool = True,
     progress_cb: Optional[Callable[[str], Any]] = None
 ) -> Dict[str, Any]:
     """
@@ -237,6 +244,12 @@ async def build_tab_video(
     if not website_url:
         website_url = _extract_url_from_text(topic)
     clean_topic = topic.split("http")[0].split("(")[0].strip() or "VARTAA"
+    # Check character consistency profile
+    char_mgr = CharacterProfileManager()
+    user_face_path = char_mgr.get_master_face(user_id) if user_id else None
+    if user_face_path and not website_url:
+        preview_media_path = str(user_face_path)
+        logger.info(f"Using user's registered face identity for character consistency: {user_face_path}")
 
     try:
         # Step 1: Autonomous Dynamic Storyboard Synthesis (Claude Code Architecture)

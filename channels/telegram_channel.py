@@ -60,7 +60,7 @@ class TelegramChannel(BaseChannel):
         self.app.add_handler(CommandHandler("start", self._on_start))
         self.app.add_handler(CommandHandler("help", self._on_help))
         self.app.add_handler(CallbackQueryHandler(self._on_callback_query))
-        self.app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, self._on_media_received))
+        self.app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE | filters.VIDEO | filters.Document.VIDEO | filters.VIDEO_NOTE, self._on_media_received))
         self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._on_message))
 
         logger.info("Starting Telegram Bot long-polling...")
@@ -155,40 +155,79 @@ class TelegramChannel(BaseChannel):
                 await safe_edit_text(status_msg, f"⚡ *{text}*")
 
         file_obj = None
+        is_video = False
+        ext = "jpg"
+
         if update.message.photo:
             file_obj = await update.message.photo[-1].get_file()
+            ext = "jpg"
+        elif update.message.video:
+            file_obj = await update.message.video.get_file()
+            ext = "mp4"
+            is_video = True
+        elif update.message.video_note:
+            file_obj = await update.message.video_note.get_file()
+            ext = "mp4"
+            is_video = True
         elif update.message.document:
             file_obj = await update.message.document.get_file()
+            mime = (update.message.document.mime_type or "").lower()
+            is_video = "video" in mime
+            ext = "mp4" if is_video else "jpg"
 
         if not file_obj:
             if status_msg:
                 await safe_edit_text(status_msg, "Could not process the uploaded file.")
             return
 
-        dest_path = USER_UPLOADS_DIR / f"{file_obj.file_unique_id}.jpg"
+        dest_path = USER_UPLOADS_DIR / f"{file_obj.file_unique_id}.{ext}"
         await file_obj.download_to_drive(custom_path=str(dest_path))
 
-        # Vision analysis
-        await progress_cb("🔍 Analyzing screenshot UI and features with Groq Vision...")
         caption = update.message.caption or ""
-        vision_res = await self.vision.analyze_image(str(dest_path), user_prompt=caption or None)
-        analysis = vision_res.get("analysis", "Visual media processed.")
 
-        if caption:
+        if is_video:
+            # Reference Video Deconstruction
+            await progress_cb("🎬 Deconstructing reference video pacing, scene cuts, and layout...")
+            from tools.video_deconstructor import VideoDeconstructor
+            deconstructor = VideoDeconstructor()
+            blueprint = await deconstructor.analyze_reference_video(dest_path)
+            
             prompt = (
-                f"[User uploaded screenshot: {dest_path.name}]\n"
-                f"Visual Analysis of Screenshot:\n{analysis}\n\n"
-                f"User Instructions: {caption}\n\n"
-                f"CRITICAL: If the user asks to create or make a video or viral reel, "
-                f"immediately call generate_viral_reel with a creative hook and script based on the screenshot!"
+                f"[User uploaded reference video: {dest_path.name}]\n"
+                f"Reference Video Analysis: {blueprint['scene_count']} scenes, {blueprint['total_duration']}s total duration.\n"
+                f"User Instructions / Topic: {caption or 'Recreate this video style'}\n\n"
+                f"CRITICAL: Call generate_viral_reel with reference_video='{str(dest_path)}' and user_id='{chat_id}' "
+                f"to recreate this exact video format, pacing, and layout!"
             )
         else:
-            prompt = (
-                f"[User uploaded screenshot: {dest_path.name}]\n"
-                f"Visual Analysis of Screenshot:\n{analysis}\n\n"
-                f"The user uploaded this screenshot. Acknowledge what is on the screen warmly with Tab's persona, "
-                f"highlight key features, and immediately propose a viral 9:16 marketing reel."
-            )
+            # Image / Character Sheet Registration
+            from tools.character_consistency_engine import CharacterProfileManager
+            char_mgr = CharacterProfileManager()
+            caption_lower = caption.lower()
+            is_char = any(w in caption_lower for w in ["face", "me", "character", "selfie", "avatar", "profile", "star", "actor"])
+            if is_char or not char_mgr.has_registered_character(str(chat_id)):
+                await char_mgr.register_user_face(str(chat_id), dest_path)
+                await progress_cb("📸 Master Character Profile locked with your face identity!")
+
+            # Vision analysis
+            await progress_cb("🔍 Analyzing image features with Groq Vision...")
+            vision_res = await self.vision.analyze_image(str(dest_path), user_prompt=caption or None)
+            analysis = vision_res.get("analysis", "Visual media processed.")
+
+            if caption:
+                prompt = (
+                    f"[User uploaded photo: {dest_path.name}]\n"
+                    f"Visual Analysis:\n{analysis}\n\n"
+                    f"User Instructions: {caption}\n\n"
+                    f"CRITICAL: If the user asks to create or make a video or viral reel, "
+                    f"immediately call generate_viral_reel with user_id='{chat_id}'!"
+                )
+            else:
+                prompt = (
+                    f"[User uploaded photo: {dest_path.name}]\n"
+                    f"Visual Analysis:\n{analysis}\n\n"
+                    f"Master Character Profile has been locked with this face. Propose creating a viral 9:16 video starring them!"
+                )
 
         try:
             result = await self.engine.handle_message(

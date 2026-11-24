@@ -99,6 +99,9 @@ class ToolRegistry:
             day_number = arguments.get("day_number", 1)
             progress_pct = arguments.get("progress_pct", 91)
             aspect_ratio = arguments.get("aspect_ratio", "9:16")
+            user_id = arguments.get("user_id")
+            reference_video = arguments.get("reference_video")
+            use_transitions = arguments.get("use_transitions", True)
 
             return await build_tab_video(
                 topic=product_name,
@@ -111,6 +114,9 @@ class ToolRegistry:
                 day_number=int(day_number) if day_number else 1,
                 progress_pct=int(progress_pct) if progress_pct else 91,
                 stamp_text=stamp_text,
+                user_id=str(user_id) if user_id else None,
+                reference_video=reference_video,
+                use_transitions=use_transitions,
                 progress_cb=progress_cb
             )
 

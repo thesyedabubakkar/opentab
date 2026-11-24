@@ -180,6 +180,8 @@ class AgentEngine:
 
                 # Execute Tool
                 try:
+                    if session_id and "user_id" not in args:
+                        args["user_id"] = session_id.replace("tg_", "").replace("session_", "")
                     result = await self.registry.dispatch(tool_name, args, progress_cb=progress_callback)
                     if isinstance(result, dict):
                         if "screenshot_path" in result:
