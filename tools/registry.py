@@ -86,7 +86,7 @@ class ToolRegistry:
         # Video Generation - Universal 4-Pipeline Studio Engine (Tab.bot / OpenMontage)
         elif tool_name in ["generate_viral_reel", "create_openmontage_video"]:
             from tools.tab_studio_engine import _extract_url_from_text
-            product_name = arguments.get("product_name") or arguments.get("topic") or "OpenTab"
+            product_name = arguments.get("product_name") or arguments.get("topic") or arguments.get("prompt") or arguments.get("idea") or "OpenTab"
             website_url = arguments.get("website_url")
             if not website_url:
                 combined_text = f"{product_name} {arguments.get('topic', '')} {arguments.get('script_text', '')} {arguments.get('script', '')}"

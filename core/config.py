@@ -43,6 +43,7 @@ class Settings(BaseSettings):
 
     # Integrations
     COMPOSIO_API_KEY: Optional[str] = None
+    HIGGSFIELD_API_KEY: Optional[str] = None
 
     # Safety
     REQUIRE_APPROVAL_FOR_SENSITIVE: bool = True

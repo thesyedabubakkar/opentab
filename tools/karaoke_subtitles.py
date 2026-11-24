@@ -22,15 +22,18 @@ async def generate_karaoke_audio_and_ass(
     voice: str,
     audio_path: Path,
     ass_path: Path,
-    highlight_color: str = "&H0015CCFA",  # Bright Yellow #FACC15 in ASS &HAABBGGRR
+    highlight_color: str = "&H0015CCFA",  # Bright Yellow #FACC15 by default
     base_color: str = "&H00FFFFFF",       # Pure White
     font_size: int = 44,
-    margin_v: int = 140
+    margin_v: int = 140,
+    pill_word: Optional[str] = None,
+    style_theme: str = "yellow"           # "yellow" or "red_pill"
 ) -> Dict[str, Any]:
     """
     Synthesizes speech using edge-tts while capturing SentenceBoundary timing events.
     Computes precise character-weighted word centiseconds and outputs an ASS subtitle
     file with {\k<centiseconds>} karaoke tags for real-time word-by-word highlighting.
+    Supports 'red_pill' theme matching Reference Video 1 (black text with vibrant red punch words).
     """
     audio_bytes = bytearray()
     boundaries: List[Dict[str, Any]] = []
@@ -52,6 +55,21 @@ async def generate_karaoke_audio_and_ass(
         last = boundaries[-1]
         total_duration = (last["offset"] + last["duration"]) / 10_000_000.0
 
+    # Configure styles based on theme
+    style_name = "KaraokeRedPill" if style_theme == "red_pill" else "KaraokeYellow"
+    if style_theme == "red_pill":
+        active_hl = "&H00481DE1"    # Vibrant Crimson Red (#E11D48 in &HAABBGGRR)
+        active_base = "&H00000000"  # Solid Black text
+        outline_col = "&H00FFFFFF"  # Crisp White outline
+        font_sz = 46
+        margin_vert = 160
+    else:
+        active_hl = highlight_color
+        active_base = base_color
+        outline_col = "&H00000000"
+        font_sz = font_size
+        margin_vert = margin_v
+
     # Build ASS content
     ass_lines = [
         "[Script Info]",
@@ -62,11 +80,13 @@ async def generate_karaoke_audio_and_ass(
         "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        f"Style: KaraokeYellow,Arial,{font_size},{highlight_color},{base_color},&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3.5,2,2,40,40,{margin_v},1",
+        f"Style: {style_name},Arial,{font_sz},{active_hl},{active_base},{outline_col},&H80000000,-1,0,0,0,100,100,0,0,1,3.5,2,2,40,40,{margin_vert},1",
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
     ]
+
+    clean_pill = pill_word.lower().strip() if pill_word else None
 
     for b in boundaries:
         start_sec = b["offset"] / 10_000_000.0
@@ -80,8 +100,8 @@ async def generate_karaoke_audio_and_ass(
         if not raw_words:
             continue
 
-        # Chunk into bite-sized phrases (max 5 words) for punchy mobile readability
-        max_words_per_line = 5
+        # Chunk into bite-sized phrases (max 4-5 words) for punchy mobile readability
+        max_words_per_line = 4
         word_chunks = [raw_words[i:i + max_words_per_line] for i in range(0, len(raw_words), max_words_per_line)]
         
         # Distribute sentence time across chunks proportional to total characters in each chunk
@@ -101,11 +121,16 @@ async def generate_karaoke_audio_and_ass(
 
             for w_idx, w in enumerate(chunk):
                 w_cs = max(12, int(round((len(w) / total_w_chars) * chunk_cs)))
-                karaoke_parts.append(f"{{\\k{w_cs}}}{w}")
+                clean_w = re.sub(r'[^\w]', '', w.lower())
+                if clean_pill and clean_pill in clean_w:
+                    # Give extra punch and red color emphasis to the pill keyword
+                    karaoke_parts.append(f"{{\\c&H00481DE1&\\k{w_cs}}}[{w}]")
+                else:
+                    karaoke_parts.append(f"{{\\k{w_cs}}}{w}")
 
             karaoke_text = " ".join(karaoke_parts)
             ass_lines.append(
-                f"Dialogue: 0,{_format_ass_time(current_chunk_start)},{_format_ass_time(chunk_end)},KaraokeYellow,,0,0,0,,{karaoke_text}"
+                f"Dialogue: 0,{_format_ass_time(current_chunk_start)},{_format_ass_time(chunk_end)},{style_name},,0,0,0,,{karaoke_text}"
             )
             current_chunk_start = chunk_end
 

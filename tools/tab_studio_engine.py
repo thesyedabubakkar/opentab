@@ -11,8 +11,11 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import uuid
 
 from core.config import DATA_DIR, settings
+from core.prompt2video_director import Prompt2VideoDirector
 from tools.app_scraper import capture_app_screens
+from tools.dynamic_scene_renderer import render_scene_html
 from tools.ffmpeg_utils import get_ffmpeg_path, get_audio_duration
+from tools.higgsfield_client import OpenHiggsfieldClient
 from tools.karaoke_subtitles import generate_karaoke_audio_and_ass, _format_ass_time
 from tools.openmontage_assets import generate_ambient_soundtrack
 
@@ -219,179 +222,58 @@ async def build_tab_video(
     progress_cb: Optional[Callable[[str], Any]] = None
 ) -> Dict[str, Any]:
     """
-    Renders Tab.bot's exact Multi-Scene Build-in-Public Launch Reel (50s narrative storyboard)
-    with live mobile app screenshots, 3D phones, progressive headers, and real-time yellow karaoke subtitles.
+    Renders God-Level Autonomous Prompt-to-Video Reels modeled after Claude Code (anything2explainer)
+    and Open-Higgsfield (wide-trace/open-higgsfield).
+    Generates dynamic multi-scene layouts, Mac studio windows, waveforms, bar charts,
+    and synchronized red-pill karaoke subtitles with zero rigid templates.
     """
     from playwright.async_api import async_playwright
 
     ffmpeg_bin = get_ffmpeg_path()
-    temp_dir = Path(tempfile.mkdtemp(prefix="tab_multiscene_"))
-    out_video = OUTPUT_DIR / f"tab_story_{uuid.uuid4().hex[:8]}.mp4"
+    temp_dir = Path(tempfile.mkdtemp(prefix="tab_godlevel_"))
+    out_video = OUTPUT_DIR / f"godlevel_{uuid.uuid4().hex[:8]}.mp4"
 
     # Auto-extract URL if embedded in topic
     if not website_url:
         website_url = _extract_url_from_text(topic)
     clean_topic = topic.split("http")[0].split("(")[0].strip() or "VARTAA"
-    domain_display = website_url.replace("https://", "").replace("http://", "").split("/")[0] if website_url else f"{clean_topic.lower()}.com"
 
     try:
-        # Step 1: Capture live mobile screenshots from URL
-        b64_welcome = ""
-        b64_features = ""
+        # Step 1: Autonomous Dynamic Storyboard Synthesis (Claude Code Architecture)
+        director = Prompt2VideoDirector()
+        higgsfield = OpenHiggsfieldClient()
+
+        storyboard = await director.direct(user_prompt=topic, website_url=website_url)
+        scenes = storyboard.get("scenes", [])
+        story_style = storyboard.get("style", "shor_explainer")
+        resolved_topic = storyboard.get("topic") or clean_topic
+
+        # If user explicitly provided script_text, inject into first scene
+        if script_text and scenes:
+            scenes[0]["narration_script"] = script_text
+
+        # Step 2: Scrape URL if provided, or generate AI visual asset via Open-Higgsfield
+        preview_media_path = None
         if website_url:
             if progress_cb:
                 await progress_cb(f"🌐 Scraping real mobile UI from {website_url}...")
             screens = await capture_app_screens(website_url)
-            w_path = screens.get("welcome")
-            f_path = screens.get("features")
-            if w_path and Path(w_path).exists():
-                with open(w_path, "rb") as f:
-                    b64_welcome = base64.b64encode(f.read()).decode("utf-8")
-            if f_path and Path(f_path).exists():
-                with open(f_path, "rb") as f:
-                    b64_features = base64.b64encode(f.read()).decode("utf-8")
+            preview_media_path = screens.get("welcome")
+        else:
+            if progress_cb:
+                await progress_cb("🎨 Generating AI visual assets via Open-Higgsfield...")
+            try:
+                hf_asset = await higgsfield.generate_media(
+                    prompt=f"{resolved_topic} user interface studio cinematography",
+                    media_type="image",
+                    aspect_ratio="16:9"
+                )
+                preview_media_path = str(hf_asset)
+            except Exception as e:
+                logger.warning(f"Higgsfield media generation fallback: {e}")
 
-        # Step 2: Define the 6-Scene Narrative Storyboard
-        chosen_voice = voice or ("hi-IN-MadhurNeural" if any(w in clean_topic.lower() for w in ["vartaa", "india", "bina"]) else "en-US-ChristopherNeural")
-
-        single_screen_html = f'<img src="data:image/png;base64,{b64_welcome}" class="screen-img"/>' if b64_welcome else '<div style="color:#fff;padding:40px;text-align:center;">Sovereign Privacy</div>'
-        welcome_img_tag = f'<img src="data:image/png;base64,{b64_welcome}" class="screen-img"/>' if b64_welcome else ''
-        features_img_tag = f'<img src="data:image/png;base64,{b64_features}" class="screen-img"/>' if b64_features else ''
-
-        scenes = [
-            # Scene 1: The Big Hook
-            {
-                "id": 1,
-                "progress": "2%",
-                "script": f"Kya aap bhi thak chuke ho har app ko apna phone number dene se?",
-                "content_html": f"""
-                <div class="huge-brand-title">{clean_topic.upper()}</div>
-                <div class="yellow-highlight-box">Bina phone number chat?</div>
-                <div class="handwritten-sub">Privacy ab wapas aayegi.</div>
-                """
-            },
-            # Scene 2: Problem vs Solution Card
-            {
-                "id": 2,
-                "progress": "10%",
-                "script": "Har jagah OTP maangte hain, aur private data leak ho jaata hai.",
-                "content_html": f"""
-                <div class="huge-brand-title">{clean_topic.upper()}</div>
-                <div class="yellow-highlight-box">Bina phone number chat?</div>
-                <div class="handwritten-sub">Privacy ab wapas aayegi.</div>
-                <div class="comparison-row">
-                  <div class="card-cross">
-                    <div class="cross-x">✕</div>
-                    <div class="card-num-text">+91 98XXX</div>
-                    <div class="card-sub-label">Phone OTP</div>
-                  </div>
-                  <div class="arrow-symbol">➔</div>
-                  <div class="card-green">
-                    <div class="card-user-text">@username</div>
-                    <div class="card-priv-label">100% Private</div>
-                  </div>
-                </div>
-                <div class="stamp-box">NO PHONE • NO OTP</div>
-                """
-            },
-            # Scene 3: Single Hero Phone Reveal
-            {
-                "id": 3,
-                "progress": "21%",
-                "script": f"Isliye humne banaya {clean_topic}. India ka apna sovereign private chat platform.",
-                "content_html": f"""
-                <div style="border: 2px solid #dc2626; border-radius: 999px; padding: 6px 20px; color: #0f172a; font-size: 22px; font-weight: 900; font-style: italic; margin-bottom: 24px;">
-                  Made in India Private Chat
-                </div>
-                <div class="phone-frame phone-single">
-                  {single_screen_html}
-                </div>
-                """
-            },
-            # Scene 4: Dual Phones (Onboarding & Identity)
-            {
-                "id": 4,
-                "progress": "35%",
-                "script": "Sirf apna unique username choose karo, aur privacy ke saath chat karo. No phone number, no email.",
-                "content_html": f"""
-                <div class="step-header-row">
-                  <div class="step-pill-title">✅ Sirf @username, Zero OTP</div>
-                  <div class="step-fraction">1/4</div>
-                </div>
-                <div class="comparison-row" style="margin: 10px 0;">
-                  <div class="phone-frame phone-dual" style="transform: rotate(-3deg);">
-                    {welcome_img_tag}
-                  </div>
-                  <div class="phone-frame phone-dual" style="transform: rotate(3deg); background: #090a0f; color: #fff; padding: 20px 16px; display: flex; flex-direction: column; justify-content: space-between;">
-                    <div>
-                      <div style="font-size: 13px; color: #94a3b8; margin-bottom: 8px;">← Step 1 of 4</div>
-                      <div style="font-size: 18px; font-weight: 900; margin-bottom: 8px;">Choose your identity</div>
-                      <div style="font-size: 12px; color: #94a3b8; line-height: 1.3; margin-bottom: 12px;">Your username is your permanent global handle.</div>
-                      <div style="background: rgba(255,255,255,0.08); border: 1.5px solid #a855f7; border-radius: 8px; padding: 10px; font-size: 13px; font-weight: 700; color: #a855f7; margin-bottom: 12px;">@thesyedabubakkar</div>
-                      <div style="font-size: 11px; color: #10b981; margin-bottom: 4px;">✔ 3 to 20 characters</div>
-                      <div style="font-size: 11px; color: #10b981; margin-bottom: 4px;">✔ Letters, numbers, underscores</div>
-                      <div style="font-size: 11px; color: #10b981;">✔ Unique & not reserved</div>
-                    </div>
-                    <div style="background: #a855f7; color: #fff; text-align: center; padding: 10px; border-radius: 8px; font-weight: 800; font-size: 13px;">Claim Username</div>
-                  </div>
-                </div>
-                """
-            },
-            # Scene 5: Triple Phone Spread (Fast Chat, HD Media & Groups)
-            {
-                "id": 5,
-                "progress": "54%",
-                "script": "End-to-end encrypted messaging, HD photo sharing, voice notes, aur super-fast private groups.",
-                "content_html": f"""
-                <div class="step-header-row">
-                  <div class="step-pill-title">✅ Fast Chat, HD Media & Groups</div>
-                  <div class="step-fraction">3/4</div>
-                </div>
-                <div class="comparison-row" style="margin: 10px 0; gap: 12px;">
-                  <div class="phone-frame phone-triple" style="transform: rotate(-6deg);">
-                    {welcome_img_tag}
-                  </div>
-                  <div class="phone-frame phone-triple" style="background: #090a0f; color: #fff; padding: 16px 12px; display: flex; flex-direction: column; justify-content: space-between; z-index: 15; box-shadow: 0 30px 60px rgba(0,0,0,0.5);">
-                    <div style="display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
-                      <div style="width: 24px; height: 24px; border-radius: 50%; background: #38bdf8;"></div>
-                      <div style="font-size: 12px; font-weight: 800;">Syed Suleman</div>
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 8px;">
-                      <div style="background: rgba(255,255,255,0.1); padding: 6px 10px; border-radius: 8px; font-size: 11px; align-self: flex-start;">assalamualaikum</div>
-                      <div style="background: #a855f7; padding: 6px 10px; border-radius: 8px; font-size: 11px; align-self: flex-end;">walaikum assalam ✨</div>
-                      <div style="background: rgba(255,255,255,0.1); padding: 6px 10px; border-radius: 8px; font-size: 11px; align-self: flex-start;">HD photos sent! 📸</div>
-                    </div>
-                    <div style="background: rgba(255,255,255,0.05); border-radius: 999px; padding: 6px 10px; font-size: 10px; color: #64748b;">Type message...</div>
-                  </div>
-                  <div class="phone-frame phone-triple" style="transform: rotate(6deg);">
-                    {features_img_tag}
-                  </div>
-                </div>
-                <div style="background: #0f172a; color: #fde047; font-size: 15px; font-weight: 900; padding: 8px 24px; border-radius: 999px; letter-spacing: 1px; margin-top: 14px;">
-                  DARK MODE • 120Hz • VOICE NOTES
-                </div>
-                """
-            },
-            # Scene 6: Call To Action
-            {
-                "id": 6,
-                "progress": "81%",
-                "script": f"{clean_topic} Android APK abhi live hai {domain_display} par. Download karo aur apni privacy wapas lo.",
-                "content_html": f"""
-                <div class="handwritten-sub" style="font-size: 34px; font-weight: 900; margin-bottom: 24px;">Abhi kaise try karein?</div>
-                <div class="cta-card">
-                  <div class="cta-heading">{clean_topic.upper()} ANDROID APK</div>
-                  <div class="cta-url-box">{domain_display}</div>
-                  <div class="cta-live-sub">Direct APK download abhi live hai</div>
-                  <div class="cta-soon-sub">Google Play Store launch jald aa raha hai</div>
-                  <div style="display: flex; justify-content: center; gap: 16px; margin-top: 8px;">
-                    <div class="stamp-box stamp-green">APK LIVE NOW</div>
-                    <div class="stamp-box">PLAY STORE SOON</div>
-                  </div>
-                </div>
-                """
-            }
-        ]
+        # Voice selection (Hinglish/Hindi or English)
+        chosen_voice = voice or ("hi-IN-MadhurNeural" if any(w in topic.lower() for w in ["vartaa", "india", "bina", "kisi", "bhai", "shor", "hai"]) else "en-US-ChristopherNeural")
 
         # Step 3: Synthesize Speech & ASS Karaoke per Scene
         scene_audio_files = []
@@ -419,40 +301,43 @@ async def build_tab_video(
 
             for sc in scenes:
                 sc_id = sc["id"]
-                sc_script = sc["script"]
+                sc_script = sc.get("narration_script") or sc.get("script", "")
                 sc_audio = temp_dir / f"scene_{sc_id}.mp3"
                 sc_ass = temp_dir / f"scene_{sc_id}.ass"
+                sc_pill = sc.get("highlight_word")
+                sc_cat = sc.get("category_tag", "TECH SPOTLIGHT")
+                sc_part = sc.get("part_label", f"PART 0{sc_id}")
 
                 if progress_cb:
                     try:
-                        await progress_cb(f"🎬 Composing Scene {sc_id}/6 ({sc['progress']})...")
+                        await progress_cb(f"🎬 Composing Scene {sc_id}/{len(scenes)}: {sc_cat} ({sc_part})...")
                     except Exception:
                         pass
 
-                # Generate speech + boundary events with safety timeout
+                # Generate speech + boundary events with red_pill theme
                 k_data = await asyncio.wait_for(
                     generate_karaoke_audio_and_ass(
                         text=sc_script,
                         voice=chosen_voice,
                         audio_path=sc_audio,
                         ass_path=sc_ass,
-                        highlight_color="&H0015CCFA",
-                        font_size=44,
-                        margin_v=140
+                        font_size=46,
+                        margin_v=160,
+                        pill_word=sc_pill,
+                        style_theme="red_pill" if story_style == "shor_explainer" else "yellow"
                     ),
-                    timeout=25.0
+                    timeout=30.0
                 )
                 dur = k_data["duration"]
                 sc["duration"] = dur
                 scene_audio_files.append(sc_audio)
                 scene_durations.append(dur)
 
-                # Render HTML Page for Scene
-                html = _get_base_html(
-                    header_day=f"{clean_topic.upper()} DAY {day_number}",
-                    progress_pct=sc["progress"],
-                    date_text="22 NOV 2026",
-                    content_html=sc["content_html"]
+                # Render dynamic HTML Scene matching reference style
+                html = render_scene_html(
+                    scene=sc,
+                    topic=resolved_topic,
+                    preview_image_path=preview_media_path
                 )
                 sc_snap = temp_dir / f"snap_{sc_id}.png"
                 await page.set_content(html, wait_until="domcontentloaded", timeout=10000)
@@ -490,6 +375,7 @@ async def build_tab_video(
             "[V4+ Styles]",
             "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
             "Style: KaraokeYellow,Arial,44,&H0015CCFA,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3.5,2,2,40,40,140,1",
+            "Style: KaraokeRedPill,Arial,46,&H00481DE1,&H00000000,&H00FFFFFF,&H80000000,-1,0,0,0,100,100,0,0,1,3.5,2,2,40,40,160,1",
             "",
             "[Events]",
             "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
@@ -513,14 +399,13 @@ async def build_tab_video(
         ]
         await asyncio.to_thread(subprocess.run, cmd_a_merge, capture_output=True, timeout=20, check=True)
 
-        # Step 6: Create Concat Demuxer for 6 Scene Images with exact durations
+        # Step 6: Create Concat Demuxer for Scene Images with exact durations
         concat_scenes_txt = temp_dir / "concat_scenes.txt"
         with open(concat_scenes_txt, "w", encoding="utf-8") as f:
             for snap, d in zip(scene_snapshots, scene_durations):
                 safe_snap = str(snap).replace("\\", "/")
                 f.write(f"file '{safe_snap}'\n")
                 f.write(f"duration {d:.2f}\n")
-            # Repeat last file per FFmpeg concat demuxer spec
             if scene_snapshots:
                 f.write(f"file '{str(scene_snapshots[-1]).replace(chr(92), '/')}'\n")
 
@@ -531,7 +416,7 @@ async def build_tab_video(
         # Step 8: Single-Pass Master Timeline Compositor with ASS Karaoke and Audio Ducking
         if progress_cb:
             try:
-                await progress_cb("✨ Encoding master 9:16 viral reel with active yellow karaoke subtitles...")
+                await progress_cb("✨ Encoding master 9:16 viral reel with active red-pill subtitles...")
             except Exception:
                 pass
 
@@ -574,13 +459,13 @@ async def build_tab_video(
             ]
             await asyncio.to_thread(subprocess.run, cmd_fallback, capture_output=True, timeout=60, check=True)
 
-        logger.info(f"OpenTab Tab.bot Reel rendered successfully ({total_timeline:.1f}s) -> {out_video}")
+        logger.info(f"OpenTab Reel rendered successfully ({total_timeline:.1f}s) -> {out_video}")
         return {
             "status": "success",
             "video_path": str(out_video),
             "duration": total_timeline,
-            "pipeline": "app_launch",
-            "topic": clean_topic,
+            "pipeline": story_style,
+            "topic": resolved_topic,
             "scenes": len(scenes)
         }
 
