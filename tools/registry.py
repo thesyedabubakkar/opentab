@@ -178,6 +178,30 @@ class ToolRegistry:
                 value=arguments.get("value", "")
             )
 
+        # Office Studio: Presentation (.pptx)
+        elif tool_name == "create_presentation":
+            from tools.presentation_tool import presentation_tool
+            topic = arguments.get("topic") or arguments.get("prompt") or "OpenTab Presentation"
+            slide_count = int(arguments.get("slide_count", 6))
+            theme = arguments.get("theme", "dark_tech")
+            pptx_path = await presentation_tool.create_presentation(topic=topic, slide_count=slide_count, theme=theme)
+            return {"status": "success", "file_path": str(pptx_path), "format": "pptx", "message": f"Created presentation: {pptx_path.name}"}
+
+        # Office Studio: Word (.docx)
+        elif tool_name == "create_word_document":
+            from tools.document_tool import document_tool
+            title = arguments.get("title") or arguments.get("topic") or "OpenTab Document"
+            doc_path = await document_tool.create_word_document(title=title)
+            return {"status": "success", "file_path": str(doc_path), "format": "docx", "message": f"Created document: {doc_path.name}"}
+
+        # Multilingual AI Voice Reader
+        elif tool_name == "explain_document":
+            from tools.ai_reader_tool import ai_reader_tool
+            file_path = arguments.get("file_path")
+            language = arguments.get("language", "english")
+            generate_audio = arguments.get("generate_audio", True)
+            return await ai_reader_tool.explain_document(file_path=Path(file_path), language=language, generate_audio=generate_audio)
+
         # Fallback to Composio
         else:
             return await self.composio.execute_action(tool_name, arguments)

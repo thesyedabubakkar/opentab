@@ -74,6 +74,23 @@ class GitHubInswapper:
             fy = max(0, int(bh * 0.075))
             return fx, fy, fw, fh
 
+    def extract_face_crop(self, im: Image.Image) -> Image.Image:
+        """Extracts only the face/head from an image, discarding any body or collage borders."""
+        w, h = im.size
+        # If it's a multi-panel turnaround sheet (wide aspect ratio > 1.4)
+        if w / h > 1.4:
+            # Panel 3 (front headshot) is typically located in 50% to 80% horizontal range
+            panel3 = im.crop((int(w * 0.50), 0, int(w * 0.80), h))
+            pw, ph = panel3.size
+            return panel3.crop((int(pw * 0.08), int(ph * 0.04), int(pw * 0.92), int(ph * 0.68)))
+
+        # If it's a full-body portrait (tall aspect ratio < 0.6)
+        if w / h < 0.6:
+            # Head is in the top 25%
+            return im.crop((int(w * 0.15), int(h * 0.04), int(w * 0.85), int(h * 0.32)))
+
+        return im
+
     def swap_face(
         self,
         target_image_path: Path,
@@ -100,8 +117,11 @@ class GitHubInswapper:
             fw = min(fw, bw - fx)
             fh = min(fh, bh - fy)
 
+            # Extract ONLY the face/head crop from source
+            src_face = self.extract_face_crop(src_im)
+
             # Resize source face to target bounding box
-            src_resized = src_im.resize((fw, fh), Image.Resampling.LANCZOS)
+            src_resized = src_face.resize((fw, fh), Image.Resampling.LANCZOS)
 
             # Match color & tone of target image face region
             try:

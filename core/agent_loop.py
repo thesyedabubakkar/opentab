@@ -99,6 +99,7 @@ class AgentEngine:
         collected_images: List[str] = []
         collected_videos: List[str] = []
         collected_voices: List[str] = []
+        collected_documents: List[str] = []
         browser_used = False
 
         for iteration in range(max_iterations):
@@ -173,7 +174,8 @@ class AgentEngine:
                     "screenshots": collected_screenshots,
                     "images": collected_images,
                     "videos": collected_videos,
-                    "voices": collected_voices
+                    "voices": collected_voices,
+                    "documents": collected_documents
                 }
 
             # Save assistant message with tool calls
@@ -243,6 +245,8 @@ class AgentEngine:
                             collected_videos.append(result["video_path"])
                         if "audio_path" in result:
                             collected_voices.append(result["audio_path"])
+                        if "file_path" in result:
+                            collected_documents.append(result["file_path"])
                     result_str = json.dumps(result) if not isinstance(result, str) else result
                 except Exception as e:
                     result_str = json.dumps({"error": str(e)})

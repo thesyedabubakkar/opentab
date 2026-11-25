@@ -172,8 +172,20 @@ class TelegramChannel(BaseChannel):
         elif update.message.document:
             file_obj = await update.message.document.get_file()
             mime = (update.message.document.mime_type or "").lower()
+            doc_name = (update.message.document.file_name or "").lower()
             is_video = "video" in mime
-            ext = "mp4" if is_video else "jpg"
+            if is_video:
+                ext = "mp4"
+            elif "pdf" in mime or doc_name.endswith(".pdf"):
+                ext = "pdf"
+            elif "presentation" in mime or doc_name.endswith(".pptx"):
+                ext = "pptx"
+            elif "word" in mime or doc_name.endswith(".docx"):
+                ext = "docx"
+            elif "image" in mime or any(doc_name.endswith(x) for x in [".jpg", ".jpeg", ".png", ".webp"]):
+                ext = "jpg"
+            else:
+                ext = "txt"
 
         if not file_obj:
             if status_msg:
@@ -184,6 +196,29 @@ class TelegramChannel(BaseChannel):
         await file_obj.download_to_drive(custom_path=str(dest_path))
 
         caption = update.message.caption or ""
+
+        # Office & Document Studio: Multilingual AI Voice Reader
+        if ext in ["pdf", "docx", "pptx", "txt"]:
+            await progress_cb(f"📖 AI Reader: Extracting and analyzing {dest_path.name}...")
+            from tools.ai_reader_tool import ai_reader_tool
+            caption_l = caption.lower()
+            lang = "hindi" if any(w in caption_l for w in ["hindi", "urdu", "hinglish", "aasan", "simple", "samjha"]) else "english"
+            reader_res = await ai_reader_tool.explain_document(
+                file_path=dest_path,
+                language=lang,
+                generate_audio=True
+            )
+            msg_target = update.message
+            await msg_target.reply_text(reader_res["explanation"], parse_mode="Markdown")
+            if reader_res.get("audio_path") and Path(reader_res["audio_path"]).exists():
+                with open(reader_res["audio_path"], "rb") as vf:
+                    await msg_target.reply_voice(voice=vf, caption="🎙️ AI Voice Reader Explanation")
+            if status_msg:
+                try:
+                    await status_msg.delete()
+                except Exception:
+                    pass
+            return
 
         if is_video:
             # Reference Video Deconstruction
@@ -223,11 +258,12 @@ class TelegramChannel(BaseChannel):
                 )
                 if swap_res.get("status") == "success" and "image_path" in swap_res:
                     img_p = swap_res["image_path"]
-                    await self.app.bot.send_photo(
-                        chat_id=chat_id,
-                        photo=open(img_p, "rb"),
-                        caption="✨ Here is your photo with your character seamlessly swapped in. 100% of the vintage car, desert, and clothing preserved!"
-                    )
+                    with open(img_p, "rb") as f_photo:
+                        await self.app.bot.send_photo(
+                            chat_id=chat_id,
+                            photo=f_photo,
+                            caption="✨ Here is your photo with your character seamlessly swapped in. 100% of the vintage car, desert, and clothing preserved!"
+                        )
                     if status_msg:
                         try:
                             await status_msg.delete()
@@ -333,6 +369,12 @@ class TelegramChannel(BaseChannel):
             if Path(voice_path).exists():
                 with open(voice_path, "rb") as f:
                     await msg_obj.reply_voice(voice=f, caption="🎙️ Voice Note")
+
+        # Send Office Documents (.pptx, .docx, .pdf, .zip, .apk)
+        for doc_path in result.get("documents", []):
+            if Path(doc_path).exists():
+                with open(doc_path, "rb") as f:
+                    await msg_obj.reply_document(document=f, caption=f"📄 {Path(doc_path).name}")
 
     async def _on_callback_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
