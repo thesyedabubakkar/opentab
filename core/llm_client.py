@@ -23,6 +23,14 @@ GROQ_FALLBACK_MODELS = [
     "openai/gpt-oss-20b"
 ]
 
+# Fallback models on Gemini in case of rate-limiting (429) or spikes (503)
+GEMINI_FALLBACK_MODELS = [
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-flash-lite-latest",
+    "gemini-3.1-flash-lite"
+]
+
 class LLMClient:
     def __init__(self):
         self.provider = settings.LLM_PROVIDER.lower()
@@ -56,7 +64,7 @@ class LLMClient:
             return {
                 "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
                 "api_key": settings.GEMINI_API_KEY,
-                "model": model_override or "gemma-4-26b-a4b-it",
+                "model": model_override or settings.GEMINI_MODEL or "gemini-3.5-flash",
                 "headers": {
                     "Authorization": f"Bearer {settings.GEMINI_API_KEY}",
                     "x-goog-api-key": settings.GEMINI_API_KEY,
@@ -72,12 +80,19 @@ class LLMClient:
         tools: Optional[List[Dict[str, Any]]] = None,
         temperature: float = 0.2
     ) -> Dict[str, Any]:
-        """Sends chat completion request with retry on 429 and automatic model failover."""
-        candidate_models = [settings.GROQ_MODEL] if self.provider == "groq" else [None]
+        """Sends chat completion request with retry on 429/503 and automatic model failover."""
         if self.provider == "groq":
+            candidate_models = [settings.GROQ_MODEL]
             for fb in GROQ_FALLBACK_MODELS:
                 if fb not in candidate_models:
                     candidate_models.append(fb)
+        elif self.provider == "gemini":
+            candidate_models = [settings.GEMINI_MODEL or "gemini-3.5-flash"]
+            for fb in GEMINI_FALLBACK_MODELS:
+                if fb not in candidate_models:
+                    candidate_models.append(fb)
+        else:
+            candidate_models = [None]
 
         last_error = None
 
@@ -110,9 +125,9 @@ class LLMClient:
                                 payload.pop("tool_choice", None)
                             continue
 
-                        if res.status_code == 429:
-                            # Parse retry after
-                            retry_after = 2.0
+                        if res.status_code in (429, 503):
+                            # Parse retry after or back off for high-demand spikes
+                            retry_after = 1.5 if res.status_code == 503 else 2.0
                             try:
                                 err_data = res.json()
                                 msg = err_data.get("error", {}).get("message", "")
@@ -123,7 +138,7 @@ class LLMClient:
                                 pass
 
                             logger.warning(
-                                f"Rate limited (429) on {cfg['model']} (attempt {attempt+1}/3). "
+                                f"Service busy or rate-limited ({res.status_code}) on {cfg['model']} (attempt {attempt+1}/3). "
                                 f"Retrying in {retry_after:.1f}s..."
                             )
                             await asyncio.sleep(retry_after)
@@ -142,7 +157,8 @@ class LLMClient:
                         raise
                     except httpx.HTTPStatusError as e:
                         last_error = e
-                        if e.response.status_code == 429:
+                        if e.response.status_code in (429, 503):
+                            logger.warning(f"HTTP {e.response.status_code} on {cfg['model']}, evaluating next candidate...")
                             continue
                         logger.error(f"LLM API Error ({e.response.status_code}): {e.response.text}")
                         if e.response.status_code in (401, 403) and settings.GEMINI_API_KEY and self.provider != "gemini":

@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     GROQ_MODEL: str = "qwen/qwen3.8-27b"
 
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
 
     # Messaging Channels
     TELEGRAM_BOT_TOKEN: Optional[str] = None

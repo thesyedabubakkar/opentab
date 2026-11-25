@@ -133,8 +133,8 @@ class TelegramChannel(BaseChannel):
         except Exception as e:
             logger.error(f"Error handling Telegram message: {e}", exc_info=True)
             err_str = str(e)
-            if "429" in err_str:
-                user_msg = "⏳ **High Traffic on Cloud AI**\n\nThe free inference tier is currently busy. Please wait 10 seconds and ask again!"
+            if any(k in err_str for k in ["429", "503", "Service Unavailable", "rate_limit"]):
+                user_msg = "⏳ **Cloud AI Service Notice**\n\nHigh demand spike on cloud servers. The system automatically retried. Please resend your request in a few seconds!"
             else:
                 user_msg = f"⚠️ **Notice**: {err_str}"
             if status_msg:
