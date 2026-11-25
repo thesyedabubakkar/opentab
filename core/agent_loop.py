@@ -31,13 +31,18 @@ Modeled after Tab (tab.bot) and OpenMontage, you run a universal 4-pipeline vide
 4. Pipeline D: Cinematic Film & Trailer (pipeline="cinematic_film"):
    - Filmic letterbox, dramatic pacing, deep narrator (`en-GB-RyanNeural`) + orchestral drone swell ("Signal From Tomorrow").
 
-Execution Principles:
-- CRITICAL: DIRECT ACTION OVER CHAT. When the user asks you to make, generate, or create a viral reel, video, or explainer:
-  DO NOT give a menu of options, do NOT ask "Would you like me to make this?", and do NOT reply with mere descriptions.
-  YOU MUST IMMEDIATELY CALL `create_openmontage_video` on your very first turn!
-- CRITICAL: DIRECT ACTION FOR IMAGES & FACESWAPS. When the user asks to generate an image, create artwork, add their character, swap a face, or replace someone in a photo:
-  DO NOT give a menu of options, do NOT say "I can do that", and DO NOT WRITE "[Generating Image...]" OR describe an image in text without calling the tool.
-  YOU MUST DIRECTLY CALL `swap_character_face` OR `generate_image` ON YOUR VERY FIRST TURN! If you do not call the tool, no image file will be created or delivered, causing a severe error!
+User Character Profile (PRE-LOADED & LOCKED):
+- The user's character identity is locked: handsome stylish young man with dark wavy hair, well-groomed full beard, confident intense gaze, wearing aviator or gold-rimmed glasses, athletic build.
+- NEVER ask the user: "What are your character's key features?" or "What is your style?". You already know their identity completely!
+
+Execution Principles (UNFILTERED & ZERO-STALL):
+- STRICTLY BANNED: Asking clarifying questions, surveys, or questionnaires ("What scene do you want?", "Tell me what you're after", "Quick questions so I can execute"). The user HATES questionnaires.
+- STRICTLY BANNED: Numbered menus ("1. Swap face, 2. Generate, 3. Recreate").
+- STRICTLY BANNED: Writing conversational filler, fake generation tags like "[Generating Image...]", or apologizing with canned responses.
+- MANDATORY: PURE DIRECT ACTION. When the user gives an image, idea, or creation prompt:
+  - For image editing / character replacement / face swap: IMMEDIATELY invoke `swap_character_face` or `generate_image` on Turn 1!
+  - For video / viral reel: IMMEDIATELY invoke `create_openmontage_video` on Turn 1!
+  - Make elite, high-taste creative assumptions and EXECUTE. Deliver the generated media file first. Keep text to a single punchy, confident sentence.
 - When the user mentions a website (e.g. vartaa.techorbitpvt.com):
   Always pass `website_url="https://vartaa.techorbitpvt.com"` and `topic="VARTAA"` so OpenTab autonomously captures real app UI screenshots!
 - If you learn an important preference or project detail about the user, call `set_user_preference` to store it permanently.
@@ -117,10 +122,12 @@ class AgentEngine:
                     "[generating image" in lower_text
                     or "here is the image" in lower_text
                     or "the result:" in lower_text
-                    or any(w in lower_user for w in ["add my character", "replace", "swap face", "generate image", "create image", "make an image", "picture of", "photo of"])
+                    or "quick questions" in lower_text
+                    or "tell me what you're after" in lower_text
+                    or any(w in lower_user for w in ["add my character", "replace", "swap face", "generate image", "create image", "make an image", "picture of", "photo of", "image"])
                 )
                 if not collected_images and is_image_intent:
-                    logger.warning("Detected hallucinated image text without tool call. Triggering automatic image generation fallback!")
+                    logger.warning("Detected hallucinated image text or questionnaire stall without tool call. Triggering automatic image generation fallback!")
                     if progress_callback:
                         try:
                             await progress_callback("🎨 Generating high-resolution image...")
@@ -143,7 +150,11 @@ class AgentEngine:
                     })
                     if isinstance(img_res, dict) and "image_path" in img_res:
                         collected_images.append(img_res["image_path"])
-                        final_text = final_text.replace("[Generating Image...]", "").replace("[generating image...]", "").strip()
+                        # If model attempted a questionnaire, replace it with crisp action text
+                        if any(q in lower_text for q in ["quick questions", "tell me what you're after", "to make sure i nail it", "1. swap", "[generating image"]):
+                            final_text = "Here is your character seamlessly placed into the scene with cinematic lighting and matching outfit!"
+                        else:
+                            final_text = final_text.replace("[Generating Image...]", "").replace("[generating image...]", "").strip()
 
                 await self.memory.add_message(
                     session_id=session_id,

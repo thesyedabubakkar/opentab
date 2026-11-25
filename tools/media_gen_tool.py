@@ -106,8 +106,21 @@ async def swap_character_face(
         master_face = char_mgr.get_master_face(user_id) if user_id else None
 
         # Build persona-guided prompt preserving character consistency
-        char_desc = character_features or "handsome man with dark wavy hair, full beard, aviator sunglasses"
+        char_desc = character_features or "handsome stylish man with dark wavy hair, full beard, aviator sunglasses"
         combined_prompt = f"cinematic high-resolution photograph of {char_desc}, {prompt}, photorealistic 8k, golden hour lighting, cinematic film still, masterpiece"
+
+        # Match source image aspect ratio if target_image is provided
+        if target_image and Path(target_image).exists():
+            try:
+                from PIL import Image
+                with Image.open(target_image) as im:
+                    w, h = im.size
+                    if w > h:
+                        width, height = 1280, int(1280 * (h / w))
+                    else:
+                        width, height = int(1280 * (w / h)), 1280
+            except Exception:
+                pass
 
         encoded_prompt = urllib.parse.quote(combined_prompt.strip())
         url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&nologo=true&seed=42"
