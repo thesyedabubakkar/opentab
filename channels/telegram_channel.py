@@ -204,8 +204,11 @@ class TelegramChannel(BaseChannel):
             from tools.character_consistency_engine import CharacterProfileManager
             char_mgr = CharacterProfileManager()
             caption_lower = caption.lower()
-            is_char = any(w in caption_lower for w in ["face", "me", "character", "selfie", "avatar", "profile", "star", "actor"])
-            if is_char or not char_mgr.has_registered_character(str(chat_id)):
+            is_target_image = any(w in caption_lower for w in ["replace", "in this", "add my character", "swap", "instead of"])
+            is_char_register = any(w in caption_lower for w in ["this is my face", "register my face", "save as my character", "my selfie", "here is my photo"])
+
+            # Only register as master face if it's explicitly a selfie/face upload and not a target image to be edited
+            if not is_target_image and (is_char_register or not char_mgr.has_registered_character(str(chat_id))):
                 await char_mgr.register_user_face(str(chat_id), dest_path)
                 await progress_cb("📸 Master Character Profile locked with your face identity!")
 
@@ -217,16 +220,20 @@ class TelegramChannel(BaseChannel):
             if caption:
                 prompt = (
                     f"[User uploaded photo: {dest_path.name}]\n"
-                    f"Visual Analysis:\n{analysis}\n\n"
+                    f"Visual Analysis of Photo:\n{analysis}\n\n"
                     f"User Instructions: {caption}\n\n"
-                    f"CRITICAL: If the user asks to create or make a video or viral reel, "
-                    f"immediately call generate_viral_reel with user_id='{chat_id}'!"
+                    f"CRITICAL DIRECT ACTION:\n"
+                    f"- If the user asks to add their character, replace someone, swap face, or generate/edit an image: "
+                    f"YOU MUST IMMEDIATELY CALL `swap_character_face` (or `generate_image`) with a descriptive prompt, target_image='{str(dest_path)}', and user_id='{chat_id}'!\n"
+                    f"DO NOT merely chat or write '[Generating Image...]'—you MUST execute the tool call!\n"
+                    f"- If the user asks to create a video or viral reel: "
+                    f"YOU MUST IMMEDIATELY CALL `generate_viral_reel` with user_id='{chat_id}'!"
                 )
             else:
                 prompt = (
                     f"[User uploaded photo: {dest_path.name}]\n"
                     f"Visual Analysis:\n{analysis}\n\n"
-                    f"Master Character Profile has been locked with this face. Propose creating a viral 9:16 video starring them!"
+                    f"Photo received. Propose creating a viral 9:16 video or cinematic character image starring them!"
                 )
 
         try:

@@ -35,6 +35,9 @@ Execution Principles:
 - CRITICAL: DIRECT ACTION OVER CHAT. When the user asks you to make, generate, or create a viral reel, video, or explainer:
   DO NOT give a menu of options, do NOT ask "Would you like me to make this?", and do NOT reply with mere descriptions.
   YOU MUST IMMEDIATELY CALL `create_openmontage_video` on your very first turn!
+- CRITICAL: DIRECT ACTION FOR IMAGES & FACESWAPS. When the user asks to generate an image, create artwork, add their character, swap a face, or replace someone in a photo:
+  DO NOT give a menu of options, do NOT say "I can do that", and DO NOT WRITE "[Generating Image...]" OR describe an image in text without calling the tool.
+  YOU MUST DIRECTLY CALL `swap_character_face` OR `generate_image` ON YOUR VERY FIRST TURN! If you do not call the tool, no image file will be created or delivered, causing a severe error!
 - When the user mentions a website (e.g. vartaa.techorbitpvt.com):
   Always pass `website_url="https://vartaa.techorbitpvt.com"` and `topic="VARTAA"` so OpenTab autonomously captures real app UI screenshots!
 - If you learn an important preference or project detail about the user, call `set_user_preference` to store it permanently.
@@ -106,6 +109,42 @@ class AgentEngine:
             # If no tools called, we're done!
             if not tool_calls:
                 final_text = content or "I have completed the task."
+
+                # FAILSAFE RECOVERY: If assistant hallucinated generating an image or user requested one, generate it NOW!
+                lower_text = final_text.lower()
+                lower_user = user_text.lower()
+                is_image_intent = (
+                    "[generating image" in lower_text
+                    or "here is the image" in lower_text
+                    or "the result:" in lower_text
+                    or any(w in lower_user for w in ["add my character", "replace", "swap face", "generate image", "create image", "make an image", "picture of", "photo of"])
+                )
+                if not collected_images and is_image_intent:
+                    logger.warning("Detected hallucinated image text without tool call. Triggering automatic image generation fallback!")
+                    if progress_callback:
+                        try:
+                            await progress_callback("🎨 Generating high-resolution image...")
+                        except Exception:
+                            pass
+
+                    # Extract best prompt description
+                    img_prompt = ""
+                    if "the result:" in lower_text:
+                        parts = final_text.split("The Result:")
+                        if len(parts) > 1:
+                            img_prompt = parts[1].split("\n\n")[0].strip()
+                    if not img_prompt or len(img_prompt) < 15:
+                        img_prompt = user_text
+
+                    user_id = session_id.replace("tg_", "").replace("session_", "")
+                    img_res = await self.registry.dispatch("swap_character_face", {
+                        "prompt": img_prompt,
+                        "user_id": user_id
+                    })
+                    if isinstance(img_res, dict) and "image_path" in img_res:
+                        collected_images.append(img_res["image_path"])
+                        final_text = final_text.replace("[Generating Image...]", "").replace("[generating image...]", "").strip()
+
                 await self.memory.add_message(
                     session_id=session_id,
                     role="assistant",

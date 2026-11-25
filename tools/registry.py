@@ -9,6 +9,7 @@ from tools.media_gen_tool import (
     generate_image,
     generate_video,
     generate_voice_note,
+    swap_character_face,
     MEDIA_SCHEMAS
 )
 from tools.reel_builder import build_viral_reel, VIRAL_REEL_SCHEMA
@@ -134,6 +135,13 @@ class ToolRegistry:
                 prompt=arguments.get("prompt", ""),
                 width=int(arguments.get("width", 1024)),
                 height=int(arguments.get("height", 1024))
+            )
+        elif tool_name in ["swap_character_face", "replace_character_in_image"]:
+            return await swap_character_face(
+                prompt=arguments.get("prompt", ""),
+                target_image=arguments.get("target_image"),
+                user_id=arguments.get("user_id"),
+                character_features=arguments.get("character_features")
             )
         elif tool_name == "generate_video":
             return await generate_video(prompt=arguments.get("prompt", ""))
