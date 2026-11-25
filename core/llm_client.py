@@ -56,9 +56,10 @@ class LLMClient:
             return {
                 "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
                 "api_key": settings.GEMINI_API_KEY,
-                "model": model_override or settings.GEMINI_MODEL,
+                "model": model_override or "gemma-4-26b-a4b-it",
                 "headers": {
                     "Authorization": f"Bearer {settings.GEMINI_API_KEY}",
+                    "x-goog-api-key": settings.GEMINI_API_KEY,
                     "Content-Type": "application/json"
                 }
             }
@@ -144,6 +145,10 @@ class LLMClient:
                         if e.response.status_code == 429:
                             continue
                         logger.error(f"LLM API Error ({e.response.status_code}): {e.response.text}")
+                        if e.response.status_code in (401, 403) and settings.GEMINI_API_KEY and self.provider != "gemini":
+                            logger.warning("Groq authentication failed (401/403). Failing over to Google Gemini!")
+                            self.provider = "gemini"
+                            return await self.chat_completion(messages=messages, tools=tools, temperature=temperature)
                         break
 
         # If all candidates exhausted, raise last error

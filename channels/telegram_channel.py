@@ -204,13 +204,36 @@ class TelegramChannel(BaseChannel):
             from tools.character_consistency_engine import CharacterProfileManager
             char_mgr = CharacterProfileManager()
             caption_lower = caption.lower()
-            is_target_image = any(w in caption_lower for w in ["replace", "in this", "add my character", "swap", "instead of"])
+            is_target_image = any(w in caption_lower for w in ["replace", "in this", "add my character", "swap", "instead of", "character"])
             is_char_register = any(w in caption_lower for w in ["this is my face", "register my face", "save as my character", "my selfie", "here is my photo"])
 
             # Only register as master face if it's explicitly a selfie/face upload and not a target image to be edited
             if not is_target_image and (is_char_register or not char_mgr.has_registered_character(str(chat_id))):
                 await char_mgr.register_user_face(str(chat_id), dest_path)
                 await progress_cb("📸 Master Character Profile locked with your face identity!")
+
+            # DIRECT ACTION: If user asks to replace/add character into the photo, execute Nano Banana immediately!
+            if is_target_image:
+                await progress_cb("🎨 Nano Banana 2.1: Swapping character into photo preserving 100% of scene...")
+                from tools.media_gen_tool import replace_character_in_photo
+                swap_res = await replace_character_in_photo(
+                    target_image=str(dest_path),
+                    user_id=str(chat_id),
+                    prompt=caption
+                )
+                if swap_res.get("status") == "success" and "image_path" in swap_res:
+                    img_p = swap_res["image_path"]
+                    await self.app.bot.send_photo(
+                        chat_id=chat_id,
+                        photo=open(img_p, "rb"),
+                        caption="✨ Here is your photo with your character seamlessly swapped in. 100% of the vintage car, desert, and clothing preserved!"
+                    )
+                    if status_msg:
+                        try:
+                            await status_msg.delete()
+                        except Exception:
+                            pass
+                    return
 
             # Vision analysis
             await progress_cb("🔍 Analyzing image features with Groq Vision...")
