@@ -6,7 +6,10 @@ from pathlib import Path
 import shutil
 from typing import Any, Dict, List, Optional
 import uuid
-import httpx
+try:
+    import httpx
+except ImportError:
+    httpx = None
 from core.config import DATA_DIR, settings
 
 logger = logging.getLogger(__name__)
