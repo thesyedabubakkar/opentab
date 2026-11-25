@@ -136,7 +136,7 @@ class ToolRegistry:
                 width=int(arguments.get("width", 1024)),
                 height=int(arguments.get("height", 1024))
             )
-        elif tool_name in ["swap_character_face", "replace_character_in_image"]:
+        elif tool_name in ["swap_character_face", "replace_character_in_image", "replace_character_in_photo"]:
             return await swap_character_face(
                 prompt=arguments.get("prompt", ""),
                 target_image=arguments.get("target_image"),

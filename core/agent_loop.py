@@ -146,6 +146,7 @@ class AgentEngine:
                     user_id = session_id.replace("tg_", "").replace("session_", "")
                     img_res = await self.registry.dispatch("swap_character_face", {
                         "prompt": img_prompt,
+                        "target_image": image_path,
                         "user_id": user_id
                     })
                     if isinstance(img_res, dict) and "image_path" in img_res:

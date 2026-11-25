@@ -220,13 +220,14 @@ class TelegramChannel(BaseChannel):
             if caption:
                 prompt = (
                     f"[User uploaded photo: {dest_path.name}]\n"
+                    f"Target Image File: {str(dest_path)}\n"
                     f"Visual Analysis of Photo:\n{analysis}\n\n"
                     f"User Instructions: {caption}\n\n"
                     f"CRITICAL DIRECT ACTION (ZERO QUESTIONNAIRES):\n"
                     f"- User character identity is locked: stylish handsome man with dark wavy hair, full groomed beard, aviator glasses.\n"
                     f"- DO NOT ASK ANY QUESTIONS. BANNED: 'What are your character features?', 'What scene do you want?'.\n"
                     f"- If the user asks to add their character, replace someone, swap face, or generate/edit an image: "
-                    f"YOU MUST IMMEDIATELY CALL `swap_character_face` with prompt combining their character features with the scene from the photo (target_image='{str(dest_path)}', user_id='{chat_id}')!\n"
+                    f"YOU MUST IMMEDIATELY CALL `swap_character_face` with target_image='{str(dest_path)}', user_id='{chat_id}', and prompt='{caption}'!\n"
                     f"DO NOT merely chat or write '[Generating Image...]'—you MUST execute the tool call!\n"
                     f"- If the user asks to create a video or viral reel: "
                     f"YOU MUST IMMEDIATELY CALL `generate_viral_reel` with user_id='{chat_id}'!"
